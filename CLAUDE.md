@@ -42,11 +42,12 @@ HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
 HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit,
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
-                       Assistant, Assistant.{Settings, Server}
+                       Assistant, Assistant.{Settings, Persona, Server}
 ├── HoloChat.Repo      sub-boundary; private to the core
 ├── HoloChat.Accounts  sub-boundary; deps: Repo; exports User, Scope
 ├── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
-└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Chat; exports Settings, LLM, Server
+└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Chat; exports Settings, Persona, LLM,
+                       Server
 ```
 
 Rules:
