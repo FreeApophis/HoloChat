@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Quality gates and tests
+    runs-on: ubuntu-latest
+
+    env:
+      MIX_ENV: test
+
+    services:
+      postgres:
+        image: postgres:18
+        # Same credentials as config/test.exs.
+        env:
+          POSTGRES_USER: holo_chat
+          POSTGRES_PASSWORD: holo_chat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U holo_chat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.1"
+          elixir-version: "1.20.4"
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ hashFiles('mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      # The same gates as `mix precommit`, but checking instead of fixing.
+      - name: Compile (warnings and Boundary violations are errors)
+        run: mix compile --warnings-as-errors
+
+      - name: No unused dependencies in mix.lock
+        run: mix deps.unlock --check-unused
+
+      - name: Formatting
+        run: mix format --check-formatted
+
+      - name: Credo
+        run: mix credo --strict
+
+      - name: Tests
+        run: mix test
