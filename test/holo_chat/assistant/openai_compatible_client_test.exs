@@ -5,32 +5,74 @@ defmodule HoloChat.Assistant.OpenAICompatibleClientTest do
 
   @endpoint "http://kobold.test:5001"
 
-  describe "list_models/1" do
-    test "returns the served model ids" do
+  describe "server_info/1" do
+    test "combines the model list with koboldcpp's extra details" do
       Req.Test.stub(Client, fn conn ->
         assert conn.method == "GET"
         assert conn.host == "kobold.test"
-        assert conn.request_path == "/v1/models"
 
-        Req.Test.json(conn, %{
-          "object" => "list",
-          "data" => [%{"id" => "gemma"}, %{"id" => "qwen"}]
-        })
+        case conn.request_path do
+          "/v1/models" ->
+            Req.Test.json(conn, %{"data" => [%{"id" => "gemma"}, %{"id" => "qwen"}]})
+
+          "/api/extra/version" ->
+            Req.Test.json(conn, %{"result" => "KoboldCpp", "version" => "1.118.1"})
+
+          "/api/v1/config/max_context_length" ->
+            Req.Test.json(conn, %{"value" => 65_536})
+
+          "/api/extra/perf" ->
+            Req.Test.json(conn, %{"last_eval_speed" => 21.37, "total_gens" => 3})
+        end
       end)
 
-      assert {:ok, ["gemma", "qwen"]} = Client.list_models(@endpoint)
+      assert {:ok,
+              %{
+                models: ["gemma", "qwen"],
+                server: "KoboldCpp 1.118.1",
+                context_length: 65_536,
+                generation_speed: 21.37
+              }} = Client.server_info(@endpoint)
+    end
+
+    test "leaves out details a plain OpenAI-compatible server doesn't offer" do
+      Req.Test.stub(Client, fn
+        %{request_path: "/v1/models"} = conn ->
+          Req.Test.json(conn, %{"data" => [%{"id" => "llama"}]})
+
+        conn ->
+          Plug.Conn.send_resp(conn, 404, "not found")
+      end)
+
+      assert {:ok, %{models: ["llama"], server: nil, context_length: nil, generation_speed: nil}} =
+               Client.server_info(@endpoint)
+    end
+
+    test "has no generation speed before the first generation" do
+      Req.Test.stub(Client, fn
+        %{request_path: "/v1/models"} = conn ->
+          Req.Test.json(conn, %{"data" => [%{"id" => "gemma"}]})
+
+        %{request_path: "/api/extra/perf"} = conn ->
+          Req.Test.json(conn, %{"last_eval_speed" => 0})
+
+        conn ->
+          Plug.Conn.send_resp(conn, 404, "")
+      end)
+
+      assert {:ok, %{generation_speed: nil}} = Client.server_info(@endpoint)
     end
 
     test "reports connection errors" do
       Req.Test.stub(Client, &Req.Test.transport_error(&1, :econnrefused))
 
-      assert {:error, :econnrefused} = Client.list_models(@endpoint)
+      assert {:error, :econnrefused} = Client.server_info(@endpoint)
     end
 
-    test "reports unexpected HTTP statuses" do
+    test "reports unexpected HTTP statuses of the model list" do
       Req.Test.stub(Client, &Plug.Conn.send_resp(&1, 503, "loading"))
 
-      assert {:error, {:http_status, 503}} = Client.list_models(@endpoint)
+      assert {:error, {:http_status, 503}} = Client.server_info(@endpoint)
     end
   end
 

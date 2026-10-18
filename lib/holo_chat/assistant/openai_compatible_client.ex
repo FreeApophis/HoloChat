@@ -14,12 +14,37 @@ defmodule HoloChat.Assistant.OpenAICompatibleClient do
   # Large local models can take minutes for a long answer.
   @receive_timeout :timer.minutes(3)
 
+  # The details beyond the model list are koboldcpp extensions; servers
+  # without them just leave those fields empty, quickly.
+  @extra_timeout :timer.seconds(2)
+
   @impl true
-  def list_models(endpoint_url) do
+  def server_info(endpoint_url) do
     with {:ok, %{"data" => models}} <- request(endpoint_url, method: :get, url: "/v1/models") do
-      {:ok, for(%{"id" => id} <- models, do: id)}
+      {:ok,
+       %{
+         models: for(%{"id" => id} <- models, do: id),
+         server: extra(endpoint_url, "/api/extra/version", &server_name/1),
+         context_length:
+           extra(endpoint_url, "/api/v1/config/max_context_length", &positive(&1["value"])),
+         generation_speed:
+           extra(endpoint_url, "/api/extra/perf", &positive(&1["last_eval_speed"]))
+       }}
     end
   end
+
+  defp extra(endpoint_url, path, parse) do
+    case request(endpoint_url, method: :get, url: path, receive_timeout: @extra_timeout) do
+      {:ok, %{} = body} -> parse.(body)
+      _error -> nil
+    end
+  end
+
+  defp server_name(%{"result" => name, "version" => version}), do: "#{name} #{version}"
+  defp server_name(_body), do: nil
+
+  defp positive(number) when is_number(number) and number > 0, do: number
+  defp positive(_value), do: nil
 
   @impl true
   def chat(endpoint_url, messages, opts) do

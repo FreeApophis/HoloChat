@@ -45,19 +45,42 @@ defmodule HoloChatWeb.AdminLive.Assistant do
               Test connection
             </button>
           </div>
-          <p id="connection-status" class="-mt-1 mb-3 min-h-5 text-sm">
+          <div id="connection-status" class="-mt-1 mb-3 min-h-5 text-sm">
             <%= case @connection do %>
-              <% {:ok, model} -> %>
-                <span class="text-success">
-                  <.icon name="hero-check-circle" class="size-4" /> Connected, serving {model}
-                </span>
+              <% {:ok, info} -> %>
+                <p class="text-success">
+                  <.icon name="hero-check-circle" class="size-4" /> Connected, serving {info.model}
+                </p>
+                <dl class="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-xs opacity-80">
+                  <%= if info.server do %>
+                    <dt>Server</dt>
+                    <dd id="connection-server">{info.server}</dd>
+                  <% end %>
+                  <%= if info.context_length do %>
+                    <dt>Context window</dt>
+                    <dd id="connection-context">{delimit(info.context_length)} tokens</dd>
+                  <% end %>
+                  <%= if info.generation_speed do %>
+                    <dt>Last generation</dt>
+                    <dd id="connection-speed">{format_speed(info.generation_speed)} tokens/s</dd>
+                  <% end %>
+                </dl>
+                <p
+                  :if={!Assistant.context_fits?(@draft_settings, info.context_length)}
+                  id="context-warning"
+                  class="mt-2 text-warning"
+                >
+                  <.icon name="hero-exclamation-triangle" class="size-4" />
+                  With {@draft_settings.context_messages} context messages and {@draft_settings.max_tokens} max tokens, a busy lobby can exceed this
+                  model's context window. Lower one of them.
+                </p>
               <% {:error, reason} -> %>
-                <span class="text-error">
+                <p class="text-error">
                   <.icon name="hero-x-circle" class="size-4" /> Could not connect: {reason}
-                </span>
+                </p>
               <% nil -> %>
             <% end %>
-          </p>
+          </div>
 
           <.input
             field={@form[:system_prompt]}
@@ -129,7 +152,7 @@ defmodule HoloChatWeb.AdminLive.Assistant do
   def handle_event("test_connection", _params, socket) do
     connection =
       case Assistant.test_connection(socket.assigns.current_scope, socket.assigns.endpoint_url) do
-        {:ok, model} -> {:ok, model}
+        {:ok, info} -> {:ok, info}
         {:error, reason} -> {:error, describe_error(reason)}
       end
 
@@ -141,7 +164,18 @@ defmodule HoloChatWeb.AdminLive.Assistant do
     |> assign(:form, to_form(changeset, as: :settings))
     |> assign(:name, Ecto.Changeset.get_field(changeset, :name))
     |> assign(:endpoint_url, Ecto.Changeset.get_field(changeset, :endpoint_url))
+    |> assign(:draft_settings, Ecto.Changeset.apply_changes(changeset))
   end
+
+  defp delimit(number) do
+    number
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
+    |> String.reverse()
+  end
+
+  defp format_speed(speed), do: :erlang.float_to_binary(speed / 1, decimals: 1)
 
   defp describe_error(:econnrefused), do: "connection refused"
   defp describe_error(:timeout), do: "timed out"

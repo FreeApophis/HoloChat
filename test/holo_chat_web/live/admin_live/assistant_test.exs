@@ -76,7 +76,16 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
     end
 
     test "tests the connection to the endpoint being edited", %{conn: conn} do
-      expect(LLMMock, :list_models, fn "http://gpu-box:5001" -> {:ok, ["gemma-31b"]} end)
+      expect(LLMMock, :server_info, fn "http://gpu-box:5001" ->
+        {:ok,
+         %{
+           models: ["gemma-31b"],
+           server: "KoboldCpp 1.118.1",
+           context_length: 65_536,
+           generation_speed: 21.37
+         }}
+      end)
+
       {:ok, view, _html} = live(conn, ~p"/admin/assistant")
 
       view
@@ -86,10 +95,38 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
       view |> element("#test-connection") |> render_click()
 
       assert has_element?(view, "#connection-status", "gemma-31b")
+      assert has_element?(view, "#connection-server", "KoboldCpp 1.118.1")
+      assert has_element?(view, "#connection-context", "65,536 tokens")
+      assert has_element?(view, "#connection-speed", "21.4 tokens/s")
+    end
+
+    test "only shows the details the server offers", %{conn: conn} do
+      expect(LLMMock, :server_info, fn _ ->
+        {:ok, %{models: ["llama"], server: nil, context_length: nil, generation_speed: nil}}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant")
+      view |> element("#test-connection") |> render_click()
+
+      assert has_element?(view, "#connection-status", "llama")
+      refute has_element?(view, "#connection-server")
+      refute has_element?(view, "#connection-context")
+      refute has_element?(view, "#connection-speed")
+    end
+
+    test "warns when the context could outgrow the model's context window", %{conn: conn} do
+      expect(LLMMock, :server_info, fn _ ->
+        {:ok, %{models: ["tiny"], server: nil, context_length: 2048, generation_speed: nil}}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant")
+      view |> element("#test-connection") |> render_click()
+
+      assert has_element?(view, "#context-warning")
     end
 
     test "reports a failed connection", %{conn: conn} do
-      expect(LLMMock, :list_models, fn _ -> {:error, :econnrefused} end)
+      expect(LLMMock, :server_info, fn _ -> {:error, :econnrefused} end)
       {:ok, view, _html} = live(conn, ~p"/admin/assistant")
 
       view |> element("#test-connection") |> render_click()

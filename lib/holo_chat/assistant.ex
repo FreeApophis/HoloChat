@@ -57,16 +57,38 @@ defmodule HoloChat.Assistant do
   @doc """
   Checks that a model server answers at `endpoint_url` (admins only).
 
-  Returns `{:ok, model_id}` with the first model it serves.
+  Returns `{:ok, info}` with the first model it serves as `:model` and the
+  server details it reports (see `HoloChat.Assistant.LLM.server_info/1`),
+  each of which may be nil.
   """
   def test_connection(scope, endpoint_url) do
     with :ok <- authorize(scope),
-         {:ok, [model | _]} <- LLM.impl().list_models(endpoint_url) do
-      {:ok, model}
+         {:ok, %{models: [model | _]} = info} <- LLM.impl().server_info(endpoint_url) do
+      {:ok, info |> Map.delete(:models) |> Map.put(:model, model)}
     else
-      {:ok, []} -> {:error, :no_models}
+      {:ok, %{models: []}} -> {:error, :no_models}
       error -> error
     end
+  end
+
+  # Rough upper bound for one message: the longest allowed body at ~4
+  # characters per token, plus the "username: " prefix.
+  @max_message_tokens 510
+
+  @doc """
+  Returns true if, in the worst case, the prompt (system prompt plus a full
+  context of maximum-length messages) and the reply fit into a model
+  context window of `context_length` tokens. Unknown windows are assumed to fit.
+  """
+  def context_fits?(_settings, nil), do: true
+
+  def context_fits?(%Settings{} = settings, context_length) do
+    system_tokens = div(String.length(settings.system_prompt), 4)
+
+    worst_case =
+      system_tokens + settings.context_messages * @max_message_tokens + settings.max_tokens
+
+    worst_case <= context_length
   end
 
   @doc """

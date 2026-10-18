@@ -121,15 +121,51 @@ defmodule HoloChat.AssistantTest do
     end
   end
 
-  describe "test_connection/2" do
-    test "reports the model served at the endpoint", %{admin: admin} do
-      expect(LLMMock, :list_models, fn "http://kobold:5001" -> {:ok, ["gemma", "other"]} end)
+  describe "context_fits?/2" do
+    test "checks the worst case (full context of maximum-size messages) against the window" do
+      settings = %Settings{}
 
-      assert {:ok, "gemma"} = Assistant.test_connection(admin, "http://kobold:5001")
+      assert Assistant.context_fits?(settings, 65_536)
+      refute Assistant.context_fits?(settings, 2048)
+      assert Assistant.context_fits?(%{settings | context_messages: 2, max_tokens: 256}, 2048)
+    end
+
+    test "can't tell without a known window" do
+      assert Assistant.context_fits?(%Settings{}, nil)
+    end
+  end
+
+  describe "test_connection/2" do
+    test "reports the first model and the server details", %{admin: admin} do
+      expect(LLMMock, :server_info, fn "http://kobold:5001" ->
+        {:ok,
+         %{
+           models: ["gemma", "other"],
+           server: "KoboldCpp 1.118.1",
+           context_length: 65_536,
+           generation_speed: 21.4
+         }}
+      end)
+
+      assert {:ok,
+              %{
+                model: "gemma",
+                server: "KoboldCpp 1.118.1",
+                context_length: 65_536,
+                generation_speed: 21.4
+              }} = Assistant.test_connection(admin, "http://kobold:5001")
+    end
+
+    test "treats a server without models as an error", %{admin: admin} do
+      expect(LLMMock, :server_info, fn _ ->
+        {:ok, %{models: [], server: nil, context_length: nil, generation_speed: nil}}
+      end)
+
+      assert {:error, :no_models} = Assistant.test_connection(admin, "http://kobold:5001")
     end
 
     test "passes errors through", %{admin: admin} do
-      expect(LLMMock, :list_models, fn _ -> {:error, :econnrefused} end)
+      expect(LLMMock, :server_info, fn _ -> {:error, :econnrefused} end)
 
       assert {:error, :econnrefused} = Assistant.test_connection(admin, "http://kobold:5001")
     end

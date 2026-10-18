@@ -8,8 +8,19 @@ defmodule HoloChat.Assistant.LLM do
 
   @type message :: %{role: String.t(), content: String.t()}
 
-  @doc "Lists the model ids served at `endpoint_url`."
-  @callback list_models(endpoint_url :: String.t()) :: {:ok, [String.t()]} | {:error, term()}
+  @type server_info :: %{
+          models: [String.t()],
+          server: String.t() | nil,
+          context_length: pos_integer() | nil,
+          generation_speed: float() | nil
+        }
+
+  @doc """
+  Describes the server at `endpoint_url`: the model ids it serves and, where
+  the server reports them, its name and version, context window (tokens) and
+  the speed of its last generation (tokens per second).
+  """
+  @callback server_info(endpoint_url :: String.t()) :: {:ok, server_info()} | {:error, term()}
 
   @doc """
   Generates the next assistant message for `messages`.
