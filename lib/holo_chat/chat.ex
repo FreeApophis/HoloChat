@@ -13,6 +13,7 @@ defmodule HoloChat.Chat do
   alias HoloChat.Repo
 
   @pubsub HoloChat.PubSub
+  @rooms_topic "rooms"
   @room_format ~r/\A[a-z0-9][a-z0-9-]{0,31}\z/
 
   @doc """
@@ -29,6 +30,36 @@ defmodule HoloChat.Chat do
   """
   def subscribe(room) do
     Phoenix.PubSub.subscribe(@pubsub, topic(room))
+  end
+
+  @doc """
+  Stops receiving new messages from `room`.
+  """
+  def unsubscribe(room) do
+    Phoenix.PubSub.unsubscribe(@pubsub, topic(room))
+  end
+
+  @doc """
+  Subscribes the calling process to activity in all rooms.
+
+  Subscribers receive `{:room_activity, room, %DateTime{}}` for every new message.
+  """
+  def subscribe_rooms do
+    Phoenix.PubSub.subscribe(@pubsub, @rooms_topic)
+  end
+
+  @doc """
+  Returns up to `limit` rooms that have messages, most recently active first,
+  as `%{name: room, last_message_at: datetime}` maps.
+  """
+  def list_active_rooms(limit \\ 20) do
+    Message
+    |> group_by([m], m.room)
+    |> select([m], %{name: m.room, last_message_at: max(m.inserted_at)})
+    # Ids break ties: clock resolution can give messages equal timestamps.
+    |> order_by([m], desc: max(m.inserted_at), desc: max(m.id))
+    |> limit(^limit)
+    |> Repo.all()
   end
 
   @doc """
@@ -54,6 +85,13 @@ defmodule HoloChat.Chat do
     |> case do
       {:ok, message} ->
         Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
+
+        Phoenix.PubSub.broadcast(
+          @pubsub,
+          @rooms_topic,
+          {:room_activity, room, message.inserted_at}
+        )
+
         {:ok, message}
 
       error ->

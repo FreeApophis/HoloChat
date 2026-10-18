@@ -66,6 +66,54 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "list_active_rooms/1" do
+    test "lists rooms with messages, most recently active first", %{scope: scope} do
+      [quiet, busy] = [unique_room(), unique_room()]
+      message_fixture(scope, busy, %{"body" => "first"})
+      message_fixture(scope, quiet, %{"body" => "second"})
+      %{inserted_at: last_at} = message_fixture(scope, busy, %{"body" => "third"})
+
+      assert [%{name: ^busy, last_message_at: ^last_at}, %{name: ^quiet}] =
+               Chat.list_active_rooms()
+    end
+
+    test "breaks timestamp ties by the latest message", %{scope: scope} do
+      [first, second] = [unique_room(), unique_room()]
+      message_fixture(scope, first)
+      message_fixture(scope, second)
+
+      # Clock resolution can give consecutive messages the same timestamp.
+      Repo.update_all(HoloChat.Chat.Message, set: [inserted_at: DateTime.utc_now()])
+
+      assert [%{name: ^second}, %{name: ^first}] = Chat.list_active_rooms()
+    end
+
+    test "is capped at the limit", %{scope: scope} do
+      for _ <- 1..3, do: message_fixture(scope, unique_room())
+      assert length(Chat.list_active_rooms(2)) == 2
+    end
+  end
+
+  describe "subscribe_rooms/0" do
+    test "notifies about activity in any room", %{scope: scope, room: room} do
+      Chat.subscribe_rooms()
+      message = message_fixture(scope, room)
+
+      assert_receive {:room_activity, ^room, at}
+      assert at == message.inserted_at
+    end
+  end
+
+  describe "unsubscribe/1" do
+    test "stops messages from the room", %{scope: scope, room: room} do
+      Chat.subscribe(room)
+      Chat.unsubscribe(room)
+      message_fixture(scope, room)
+
+      refute_receive {:new_message, _}
+    end
+  end
+
   describe "valid_room?/1" do
     test "accepts slugs and rejects everything else" do
       assert Chat.valid_room?("lobby")

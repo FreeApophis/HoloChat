@@ -136,7 +136,9 @@ defmodule HoloChatWeb.ChatLiveTest do
     |> form("#room-form", room: %{name: "#Elixir Fans!"})
     |> render_submit()
 
-    assert_redirect(view, ~p"/rooms/elixir-fans")
+    # Switching stays in the same LiveView, so per-tab state (unread rooms) survives.
+    assert_patch(view, ~p"/rooms/elixir-fans")
+    assert has_element?(view, "#room-title", "elixir-fans")
   end
 
   test "an invalid room in the URL redirects to the lobby", %{conn: conn} do

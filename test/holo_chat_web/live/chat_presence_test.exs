@@ -4,22 +4,16 @@ defmodule HoloChatWeb.ChatPresenceTest do
   import Phoenix.LiveViewTest
   import HoloChat.AccountsFixtures
   import HoloChat.ChatFixtures
+  import HoloChatWeb.PresenceHelpers
 
   alias HoloChatWeb.Presence
-  alias Phoenix.Socket.Broadcast
-  alias Phoenix.Tracker.Shard
 
   setup do
     # PubSub and Presence are global, so each test gets its own room.
     room = unique_room()
     Presence.subscribe(room)
 
-    on_exit(fn ->
-      for pid <- Presence.fetchers_pids() do
-        ref = Process.monitor(pid)
-        assert_receive {:DOWN, ^ref, _, _, _}, 1000
-      end
-    end)
+    on_exit(&await_presence_fetchers/0)
 
     %{room: room}
   end
@@ -115,25 +109,4 @@ defmodule HoloChatWeb.ChatPresenceTest do
     |> form("#message-form", message: %{body: body})
     |> render_change()
   end
-
-  # Waits for a presence_diff that carries `expected` metadata. Once the
-  # tracker shard has finished broadcasting it, every LiveView in the room
-  # has the diff in its mailbox, so the next render reflects it.
-  defp await_presence(expected) do
-    receive do
-      %Broadcast{event: "presence_diff", payload: %{joins: joins}} ->
-        if Enum.any?(joins, fn {_key, %{metas: metas}} ->
-             Enum.any?(metas, &matches?(&1, expected))
-           end) do
-          :sys.get_state(Shard.name_for_number(Presence, 0))
-          :ok
-        else
-          await_presence(expected)
-        end
-    after
-      1000 -> flunk("no presence_diff with #{inspect(expected)}")
-    end
-  end
-
-  defp matches?(meta, expected), do: Map.take(meta, Map.keys(expected)) == expected
 end

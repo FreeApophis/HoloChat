@@ -8,6 +8,7 @@ defmodule HoloChatWeb.ChatLive do
   @default_room "lobby"
   @typing_timeout :timer.seconds(3)
   @max_avatars 5
+  @room_list_size 20
 
   # Literal class strings so Tailwind picks them up.
   @avatar_colors ~w(
@@ -19,191 +20,235 @@ defmodule HoloChatWeb.ChatLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
-          <div class="flex items-center gap-3">
-            <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
-              <.icon name="hero-hashtag" class="size-4 opacity-60" />
-              {@room}
-            </h1>
-            <div
-              id="online-users"
-              class="flex items-center gap-2"
-              title={online_summary(@online_names, @guest_count)}
-            >
-              <div class="flex -space-x-1.5">
-                <div
-                  :for={name <- Enum.take(@online_names, @max_avatars)}
-                  class={[
-                    "grid size-6 place-items-center rounded-full text-[0.65rem] font-semibold text-white ring-2 ring-base-100",
-                    avatar_color(name)
-                  ]}
-                >
-                  {initial(name)}
-                </div>
-              </div>
-              <span id="online-count" class="flex items-center gap-1.5 text-xs opacity-70">
-                <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span>
-                {length(@online_names) + @guest_count} online
-              </span>
-            </div>
-          </div>
-          <.form
-            for={@room_form}
-            id="room-form"
-            phx-submit="switch_room"
-            class="flex items-center gap-2"
-          >
-            <input
-              type="text"
-              name={@room_form[:name].name}
-              value={@room_form[:name].value}
-              placeholder="Join a room…"
-              aria-label="Room name"
-              autocomplete="off"
-              class="w-40 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-            <button
-              type="submit"
-              class="rounded-lg px-2 py-1.5 text-sm transition hover:bg-base-200"
-              aria-label="Join room"
-            >
-              <.icon name="hero-arrow-right" class="size-4" />
-            </button>
-          </.form>
-        </div>
-
-        <div
-          id="messages"
-          phx-update="stream"
-          phx-hook=".ScrollToBottom"
-          class="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4"
+      <div class="flex min-h-0 flex-1 gap-4">
+        <aside
+          id="room-list"
+          class="hidden w-56 shrink-0 flex-col overflow-y-auto rounded-2xl border border-base-300 bg-base-100 p-2 shadow-sm md:flex"
+          aria-label="Rooms"
         >
-          <div
-            id="messages-empty"
-            class="hidden h-full flex-col items-center justify-center gap-2 text-center opacity-60 only:flex"
+          <h2 class="px-2 pt-1 pb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
+            Rooms
+          </h2>
+          <.link
+            :for={room <- room_list(@active_rooms, @room_counts, @room, @unread)}
+            id={"room-link-#{room.name}"}
+            patch={room_path(room.name)}
+            aria-current={room.current? && "page"}
+            class={[
+              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
+              if(room.current?,
+                do: "bg-primary/10 font-semibold text-primary",
+                else: "hover:bg-base-200"
+              )
+            ]}
           >
-            <.icon name="hero-sparkles" class="size-8" />
-            <p class="text-sm">No messages in #{@room} yet. Say hi!</p>
-          </div>
-          <div
-            :for={{id, message} <- @streams.messages}
-            id={id}
-            class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
-          >
-            <div class={[
-              "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
-              avatar_color(message.username)
-            ]}>
-              {initial(message.username)}
-            </div>
-            <div class="min-w-0">
-              <div class="flex items-baseline gap-2">
-                <span class="text-sm font-semibold">{message.username}</span>
-                <time
-                  id={"message-time-#{message.id}"}
-                  datetime={DateTime.to_iso8601(message.inserted_at)}
-                  title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
-                  phx-hook=".LocalTime"
-                  phx-update="ignore"
-                  class="text-xs opacity-50"
-                >
-                  {Calendar.strftime(message.inserted_at, "%H:%M")}
-                </time>
-              </div>
-              <p class="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>
-            </div>
-          </div>
-        </div>
-        <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollToBottom">
-          export default {
-            mounted() {
-              this.scroll()
-              this.observer = new MutationObserver(() => {
-                // Only follow new messages if the user hasn't scrolled up to read history.
-                if (this.nearBottom) this.scroll()
-              })
-              this.el.addEventListener("scroll", () => this.trackPosition())
-              this.observer.observe(this.el, {childList: true})
-              this.trackPosition()
-            },
-            destroyed() { this.observer.disconnect() },
-            trackPosition() {
-              const el = this.el
-              this.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-            },
-            scroll() { this.el.scrollTop = this.el.scrollHeight; this.nearBottom = true }
-          }
-        </script>
-        <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
-          // Rewrites a server-rendered UTC <time> in the viewer's own time zone:
-          // just the time for today, otherwise date and time.
-          export default {
-            mounted() {
-              const date = new Date(this.el.getAttribute("datetime"))
-              const now = new Date()
-              const sameDay = date.toDateString() === now.toDateString()
-              const sameYear = date.getFullYear() === now.getFullYear()
-              const time = {hour: "2-digit", minute: "2-digit"}
-              const options = sameDay ? time
-                : sameYear ? {...time, month: "short", day: "numeric"}
-                : {...time, year: "numeric", month: "short", day: "numeric"}
-
-              this.el.textContent = date.toLocaleString(undefined, options)
-              this.el.title = date.toLocaleString(undefined, {dateStyle: "full", timeStyle: "long"})
-            }
-          }
-        </script>
-
-        <div
-          id="typing-indicator"
-          class="flex h-6 items-center gap-2 px-5 text-xs opacity-70"
-          aria-live="polite"
-        >
-          <%= if @typing_names != [] do %>
-            <span class="flex items-center gap-0.5" aria-hidden="true">
-              <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]"></span>
-              <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]"></span>
-              <span class="size-1 animate-bounce rounded-full bg-current"></span>
+            <.icon name="hero-hashtag" class="size-3.5 shrink-0 opacity-50" />
+            <span class={["min-w-0 flex-1 truncate", room.unread? && "font-semibold"]}>
+              {room.name}
             </span>
-            <span>{typing_text(@typing_names)}</span>
-          <% end %>
-        </div>
+            <span
+              :if={room.unread?}
+              id={"room-unread-#{room.name}"}
+              class="size-2 shrink-0 rounded-full bg-primary"
+              aria-label="New messages"
+            ></span>
+            <span
+              :if={room.online > 0}
+              id={"room-online-#{room.name}"}
+              class="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-xs font-medium text-emerald-600"
+              title={"#{room.online} online"}
+            >
+              {room.online}
+            </span>
+          </.link>
+        </aside>
 
-        <.form
-          :if={@current_scope}
-          for={@form}
-          id="message-form"
-          phx-change="validate"
-          phx-submit="send"
-          class="flex gap-2 border-t border-base-300 px-3 pt-3"
-        >
-          <div class="flex-1">
-            <.input
-              field={@form[:body]}
-              type="text"
-              placeholder={"Message ##{@room}"}
-              autocomplete="off"
-            />
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
+            <div class="flex items-center gap-3">
+              <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
+                <.icon name="hero-hashtag" class="size-4 opacity-60" />
+                {@room}
+              </h1>
+              <div
+                id="online-users"
+                class="flex items-center gap-2"
+                title={online_summary(@online_names, @guest_count)}
+              >
+                <div class="flex -space-x-1.5">
+                  <div
+                    :for={name <- Enum.take(@online_names, @max_avatars)}
+                    class={[
+                      "grid size-6 place-items-center rounded-full text-[0.65rem] font-semibold text-white ring-2 ring-base-100",
+                      avatar_color(name)
+                    ]}
+                  >
+                    {initial(name)}
+                  </div>
+                </div>
+                <span id="online-count" class="flex items-center gap-1.5 text-xs opacity-70">
+                  <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span>
+                  {length(@online_names) + @guest_count} online
+                </span>
+              </div>
+            </div>
+            <.form
+              for={@room_form}
+              id="room-form"
+              phx-submit="switch_room"
+              class="flex items-center gap-2"
+            >
+              <input
+                type="text"
+                name={@room_form[:name].name}
+                value={@room_form[:name].value}
+                placeholder="Join a room…"
+                aria-label="Room name"
+                autocomplete="off"
+                class="w-40 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+              />
+              <button
+                type="submit"
+                class="rounded-lg px-2 py-1.5 text-sm transition hover:bg-base-200"
+                aria-label="Join room"
+              >
+                <.icon name="hero-arrow-right" class="size-4" />
+              </button>
+            </.form>
           </div>
-          <.button variant="primary" id="send-button" phx-disable-with="Sending…">
-            <.icon name="hero-paper-airplane" class="size-4" /> Send
-          </.button>
-        </.form>
 
-        <div
-          :if={!@current_scope}
-          id="guest-notice"
-          class="flex flex-wrap items-center justify-center gap-x-1 border-t border-base-300 px-4 pt-3 pb-1 text-sm opacity-80"
-        >
-          <.link navigate={~p"/users/log-in"} class="font-semibold text-primary hover:underline">
-            Log in
-          </.link>
-          or
-          <.link navigate={~p"/users/register"} class="font-semibold text-primary hover:underline">
-            create an account
-          </.link>
-          to join the conversation.
+          <div
+            id="messages"
+            phx-update="stream"
+            phx-hook=".ScrollToBottom"
+            class="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4"
+          >
+            <div
+              id="messages-empty"
+              class="hidden h-full flex-col items-center justify-center gap-2 text-center opacity-60 only:flex"
+            >
+              <.icon name="hero-sparkles" class="size-8" />
+              <p class="text-sm">No messages in #{@room} yet. Say hi!</p>
+            </div>
+            <div
+              :for={{id, message} <- @streams.messages}
+              id={id}
+              class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
+            >
+              <div class={[
+                "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
+                avatar_color(message.username)
+              ]}>
+                {initial(message.username)}
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-sm font-semibold">{message.username}</span>
+                  <time
+                    id={"message-time-#{message.id}"}
+                    datetime={DateTime.to_iso8601(message.inserted_at)}
+                    title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+                    phx-hook=".LocalTime"
+                    phx-update="ignore"
+                    class="text-xs opacity-50"
+                  >
+                    {Calendar.strftime(message.inserted_at, "%H:%M")}
+                  </time>
+                </div>
+                <p class="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>
+              </div>
+            </div>
+          </div>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollToBottom">
+            export default {
+              mounted() {
+                this.scroll()
+                this.observer = new MutationObserver(() => {
+                  // Only follow new messages if the user hasn't scrolled up to read history.
+                  if (this.nearBottom) this.scroll()
+                })
+                this.el.addEventListener("scroll", () => this.trackPosition())
+                this.observer.observe(this.el, {childList: true})
+                this.trackPosition()
+              },
+              destroyed() { this.observer.disconnect() },
+              trackPosition() {
+                const el = this.el
+                this.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+              },
+              scroll() { this.el.scrollTop = this.el.scrollHeight; this.nearBottom = true }
+            }
+          </script>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
+            // Rewrites a server-rendered UTC <time> in the viewer's own time zone:
+            // just the time for today, otherwise date and time.
+            export default {
+              mounted() {
+                const date = new Date(this.el.getAttribute("datetime"))
+                const now = new Date()
+                const sameDay = date.toDateString() === now.toDateString()
+                const sameYear = date.getFullYear() === now.getFullYear()
+                const time = {hour: "2-digit", minute: "2-digit"}
+                const options = sameDay ? time
+                  : sameYear ? {...time, month: "short", day: "numeric"}
+                  : {...time, year: "numeric", month: "short", day: "numeric"}
+
+                this.el.textContent = date.toLocaleString(undefined, options)
+                this.el.title = date.toLocaleString(undefined, {dateStyle: "full", timeStyle: "long"})
+              }
+            }
+          </script>
+
+          <div
+            id="typing-indicator"
+            class="flex h-6 items-center gap-2 px-5 text-xs opacity-70"
+            aria-live="polite"
+          >
+            <%= if @typing_names != [] do %>
+              <span class="flex items-center gap-0.5" aria-hidden="true">
+                <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]"></span>
+                <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]"></span>
+                <span class="size-1 animate-bounce rounded-full bg-current"></span>
+              </span>
+              <span>{typing_text(@typing_names)}</span>
+            <% end %>
+          </div>
+
+          <.form
+            :if={@current_scope}
+            for={@form}
+            id="message-form"
+            phx-change="validate"
+            phx-submit="send"
+            class="flex gap-2 border-t border-base-300 px-3 pt-3"
+          >
+            <div class="flex-1">
+              <.input
+                field={@form[:body]}
+                type="text"
+                placeholder={"Message ##{@room}"}
+                autocomplete="off"
+              />
+            </div>
+            <.button variant="primary" id="send-button" phx-disable-with="Sending…">
+              <.icon name="hero-paper-airplane" class="size-4" /> Send
+            </.button>
+          </.form>
+
+          <div
+            :if={!@current_scope}
+            id="guest-notice"
+            class="flex flex-wrap items-center justify-center gap-x-1 border-t border-base-300 px-4 pt-3 pb-1 text-sm opacity-80"
+          >
+            <.link navigate={~p"/users/log-in"} class="font-semibold text-primary hover:underline">
+              Log in
+            </.link>
+            or
+            <.link navigate={~p"/users/register"} class="font-semibold text-primary hover:underline">
+              create an account
+            </.link>
+            to join the conversation.
+          </div>
         </div>
       </div>
     </Layouts.app>
@@ -211,35 +256,78 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   @impl true
-  def mount(params, _session, socket) do
+  def mount(_params, _session, socket) do
+    if connected?(socket) do
+      Chat.subscribe_rooms()
+      Presence.subscribe_rooms()
+    end
+
+    {:ok,
+     socket
+     |> assign(:room, nil)
+     |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
+     |> assign(:max_avatars, @max_avatars)
+     |> assign(:me, %{name: username(socket.assigns.current_scope), typing: false})
+     |> assign(:typing_timer, nil)
+     |> assign(:unread, MapSet.new())
+     |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
+     |> assign(:room_counts, Presence.room_counts())}
+  end
+
+  # Rooms are switched with live patches, so this process (and its
+  # per-tab state such as unread rooms) lives across room changes.
+  @impl true
+  def handle_params(params, _uri, socket) do
     room = Map.get(params, "room", @default_room)
 
-    if Chat.valid_room?(room) do
-      me = %{name: username(socket.assigns.current_scope), typing: false}
+    cond do
+      not Chat.valid_room?(room) ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Room names may only contain lowercase letters, digits and dashes.")
+         |> push_navigate(to: ~p"/")}
 
-      if connected?(socket) do
-        Chat.subscribe(room)
-        Presence.subscribe(room)
-        {:ok, _} = Presence.track_user(room, socket.id, me)
-      end
+      room == socket.assigns.room ->
+        {:noreply, socket}
 
-      {:ok,
-       socket
-       |> assign(:room, room)
-       |> assign(:page_title, "#" <> room)
-       |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
-       |> assign(:max_avatars, @max_avatars)
-       |> assign(:me, me)
-       |> assign(:typing_timer, nil)
-       |> assign_presence()
-       |> assign_message_form(%{})
-       |> stream(:messages, Chat.list_recent_messages(room))}
-    else
-      {:ok,
-       socket
-       |> put_flash(:error, "Room names may only contain lowercase letters, digits and dashes.")
-       |> push_navigate(to: ~p"/")}
+      true ->
+        {:noreply, socket |> leave_room() |> enter_room(room)}
     end
+  end
+
+  defp leave_room(%{assigns: %{room: nil}} = socket), do: socket
+
+  defp leave_room(socket) do
+    %{room: room} = socket.assigns
+
+    if connected?(socket) do
+      Chat.unsubscribe(room)
+      Presence.unsubscribe(room)
+      Presence.untrack_user(room, socket.id)
+    end
+
+    restart_typing_timer(socket, false)
+  end
+
+  defp enter_room(socket, room) do
+    me = %{socket.assigns.me | typing: false}
+
+    if connected?(socket) do
+      Chat.subscribe(room)
+      Presence.subscribe(room)
+      {:ok, _} = Presence.track_user(room, socket.id, me)
+      {:ok, _} = Presence.put_room(socket.id, room)
+    end
+
+    socket
+    |> assign(:room, room)
+    |> assign(:page_title, "#" <> room)
+    |> assign(:me, me)
+    |> update(:unread, &MapSet.delete(&1, room))
+    |> assign(:room_counts, Presence.room_counts())
+    |> assign_presence()
+    |> assign_message_form(%{})
+    |> stream(:messages, Chat.list_recent_messages(room), reset: true)
   end
 
   @impl true
@@ -277,19 +365,47 @@ defmodule HoloChatWeb.ChatLive do
     room = normalize_room(name)
 
     if Chat.valid_room?(room) do
-      {:noreply, push_navigate(socket, to: room_path(room))}
+      {:noreply, push_patch(socket, to: room_path(room))}
     else
       {:noreply, put_flash(socket, :error, "Please enter a room name.")}
     end
   end
 
   @impl true
-  def handle_info({:new_message, message}, socket) do
+  def handle_info({:new_message, %{room: room} = message}, %{assigns: %{room: room}} = socket) do
     {:noreply, stream_insert(socket, :messages, message)}
   end
 
-  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
-    {:noreply, assign_presence(socket)}
+  # Still in flight from a room we just left.
+  def handle_info({:new_message, _message}, socket), do: {:noreply, socket}
+
+  def handle_info({:room_activity, room, at}, socket) do
+    active_rooms =
+      [
+        %{name: room, last_message_at: at}
+        | Enum.reject(socket.assigns.active_rooms, &(&1.name == room))
+      ]
+      |> Enum.take(@room_list_size)
+
+    unread =
+      if room == socket.assigns.room,
+        do: socket.assigns.unread,
+        else: MapSet.put(socket.assigns.unread, room)
+
+    {:noreply, assign(socket, active_rooms: active_rooms, unread: unread)}
+  end
+
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", topic: topic}, socket) do
+    cond do
+      Presence.rooms_topic?(topic) ->
+        {:noreply, assign(socket, :room_counts, Presence.room_counts())}
+
+      topic == Presence.topic(socket.assigns.room) ->
+        {:noreply, assign_presence(socket)}
+
+      true ->
+        {:noreply, socket}
+    end
   end
 
   def handle_info(:typing_timeout, socket) do
@@ -349,6 +465,22 @@ defmodule HoloChatWeb.ChatLive do
   defp assign_message_form(socket, params) do
     changeset = Chat.change_message(%Message{room: socket.assigns.room}, params)
     assign(socket, :form, to_form(changeset))
+  end
+
+  # Lobby first, then rooms by latest message, then rooms that only have
+  # people in them, and finally the current room if it is none of those.
+  defp room_list(active_rooms, room_counts, current, unread) do
+    ([@default_room | Enum.map(active_rooms, & &1.name)] ++
+       Enum.sort(Map.keys(room_counts)) ++ [current])
+    |> Enum.uniq()
+    |> Enum.map(fn name ->
+      %{
+        name: name,
+        online: Map.get(room_counts, name, 0),
+        unread?: MapSet.member?(unread, name),
+        current?: name == current
+      }
+    end)
   end
 
   defp room_path(@default_room), do: ~p"/"
