@@ -378,6 +378,38 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
+  describe "set_admin/2" do
+    test "grants and revokes admin rights by username" do
+      user = user_fixture()
+      refute user.is_admin
+
+      assert {:ok, %User{is_admin: true}} = Accounts.set_admin(String.upcase(user.username), true)
+      assert Accounts.get_user!(user.id).is_admin
+
+      assert {:ok, %User{is_admin: false}} = Accounts.set_admin(user.username, false)
+    end
+
+    test "returns an error for unknown users" do
+      assert {:error, :not_found} = Accounts.set_admin("nobody", true)
+    end
+
+    test "cannot be set through registration" do
+      {:ok, {user, _codes}} = Accounts.register_user(valid_user_attributes(is_admin: true))
+      refute user.is_admin
+    end
+  end
+
+  describe "admin?/1" do
+    test "is true only for scopes of admin users" do
+      user = user_fixture()
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+      assert Accounts.admin?(user_scope_fixture(admin))
+      refute Accounts.admin?(user_scope_fixture(user))
+      refute Accounts.admin?(nil)
+    end
+  end
+
   describe "inspect/2 for the User module" do
     test "does not include password" do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""

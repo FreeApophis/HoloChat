@@ -8,7 +8,7 @@ defmodule HoloChat.Accounts do
 
   import Ecto.Query, warn: false
 
-  alias HoloChat.Accounts.{RecoveryCode, User, UserToken}
+  alias HoloChat.Accounts.{RecoveryCode, Scope, User, UserToken}
   alias HoloChat.Repo
 
   ## Database getters
@@ -62,6 +62,25 @@ defmodule HoloChat.Accounts do
   def change_user_registration(user, attrs \\ %{}, opts \\ []) do
     User.registration_changeset(user, attrs, Keyword.put_new(opts, :hash_password, false))
   end
+
+  ## Admins
+
+  @doc """
+  Grants (`true`) or revokes (`false`) admin rights. Only meant for
+  operators (see `mix holo_chat.admin`); there is no web path to it.
+  """
+  def set_admin(username, admin?) when is_binary(username) and is_boolean(admin?) do
+    case get_user_by_username(username) do
+      nil -> {:error, :not_found}
+      user -> user |> Ecto.Changeset.change(is_admin: admin?) |> Repo.update()
+    end
+  end
+
+  @doc """
+  Returns true if the scope belongs to an admin.
+  """
+  def admin?(%Scope{user: %User{is_admin: true}}), do: true
+  def admin?(_scope), do: false
 
   ## Settings
 

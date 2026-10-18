@@ -325,6 +325,45 @@ defmodule HoloChatWeb.UserAuthTest do
     end
   end
 
+  describe "on_mount :require_admin" do
+    setup %{conn: conn} do
+      socket = %LiveView.Socket{
+        endpoint: HoloChatWeb.Endpoint,
+        assigns: %{__changed__: %{}, flash: %{}}
+      }
+
+      %{socket: socket, conn: conn}
+    end
+
+    test "allows admins", %{conn: conn, socket: socket} do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+      session =
+        conn
+        |> put_session(:user_token, Accounts.generate_user_session_token(admin))
+        |> get_session()
+
+      assert {:cont, _socket} = UserAuth.on_mount(:require_admin, %{}, session, socket)
+    end
+
+    test "redirects other users home", %{conn: conn, user: user, socket: socket} do
+      session =
+        conn
+        |> put_session(:user_token, Accounts.generate_user_session_token(user))
+        |> get_session()
+
+      assert {:halt, socket} = UserAuth.on_mount(:require_admin, %{}, session, socket)
+      assert {:redirect, %{to: "/"}} = socket.redirected
+    end
+
+    test "redirects guests to log in", %{conn: conn, socket: socket} do
+      session = conn |> get_session()
+
+      assert {:halt, socket} = UserAuth.on_mount(:require_admin, %{}, session, socket)
+      assert {:redirect, %{to: "/users/log-in"}} = socket.redirected
+    end
+  end
+
   describe "require_authenticated_user/2" do
     setup %{conn: conn} do
       %{conn: UserAuth.fetch_current_scope_for_user(conn, [])}

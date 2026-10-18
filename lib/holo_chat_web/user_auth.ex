@@ -252,6 +252,27 @@ defmodule HoloChatWeb.UserAuth do
     end
   end
 
+  def on_mount(:require_admin, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+
+    cond do
+      Accounts.admin?(socket.assigns.current_scope) ->
+        {:cont, socket}
+
+      socket.assigns.current_scope ->
+        {:halt,
+         socket
+         |> Phoenix.LiveView.put_flash(:error, "You are not allowed to access this page.")
+         |> Phoenix.LiveView.redirect(to: ~p"/")}
+
+      true ->
+        {:halt,
+         socket
+         |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")}
+    end
+  end
+
   defp mount_current_scope(socket, session) do
     Phoenix.Component.assign_new(socket, :current_scope, fn ->
       {user, _} =

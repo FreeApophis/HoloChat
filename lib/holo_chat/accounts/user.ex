@@ -8,6 +8,7 @@ defmodule HoloChat.Accounts.User do
     field :username, :string
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
+    field :is_admin, :boolean, default: false
     field :authenticated_at, :utc_datetime, virtual: true
 
     timestamps(type: :utc_datetime)
