@@ -66,6 +66,43 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "list_messages_page/3" do
+    setup %{scope: scope, room: room} do
+      messages = for n <- 1..5, do: message_fixture(scope, room, %{"body" => "m#{n}"})
+      %{messages: messages}
+    end
+
+    test "without a cursor returns the latest page, oldest first", %{room: room} do
+      assert {page, true} = Chat.list_messages_page(room, nil, 2)
+      assert Enum.map(page, & &1.body) == ["m4", "m5"]
+    end
+
+    test "returns the page before a message and says when history ends",
+         %{room: room, messages: messages} do
+      assert {page, true} = Chat.list_messages_page(room, Enum.at(messages, 3), 2)
+      assert Enum.map(page, & &1.body) == ["m2", "m3"]
+
+      assert {page, false} = Chat.list_messages_page(room, Enum.at(messages, 1), 2)
+      assert Enum.map(page, & &1.body) == ["m1"]
+    end
+
+    test "pages through equal timestamps without gaps or repeats", %{room: room} do
+      Repo.update_all(HoloChat.Chat.Message, set: [inserted_at: DateTime.utc_now()])
+
+      {third, true} = Chat.list_messages_page(room, nil, 2)
+      {second, true} = Chat.list_messages_page(room, hd(third), 2)
+      {first, false} = Chat.list_messages_page(room, hd(second), 2)
+
+      assert Enum.map(first ++ second ++ third, & &1.body) == ~w(m1 m2 m3 m4 m5)
+    end
+
+    test "only returns the room's messages", %{scope: scope, room: room} do
+      message_fixture(scope, unique_room(), %{"body" => "elsewhere"})
+      assert {page, false} = Chat.list_messages_page(room, nil, 10)
+      refute "elsewhere" in Enum.map(page, & &1.body)
+    end
+  end
+
   describe "list_active_rooms/1" do
     test "lists rooms with messages, most recently active first", %{scope: scope} do
       [quiet, busy] = [unique_room(), unique_room()]

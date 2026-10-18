@@ -66,12 +66,34 @@ defmodule HoloChat.Chat do
   Returns the most recent `limit` messages in `room`, oldest first.
   """
   def list_recent_messages(room, limit \\ 50) do
-    Message
-    |> where(room: ^room)
-    |> order_by(desc: :inserted_at, desc: :id)
-    |> limit(^limit)
-    |> Repo.all()
-    |> Enum.reverse()
+    {messages, _more?} = list_messages_page(room, nil, limit)
+    messages
+  end
+
+  @doc """
+  Returns up to `limit` messages in `room` older than the `before` message
+  (or the latest ones when `before` is nil), oldest first, together with
+  whether even older messages exist.
+
+  Messages are ordered by `(inserted_at, id)`, so paging is exact even when
+  timestamps are equal.
+  """
+  def list_messages_page(room, before, limit) do
+    messages =
+      Message
+      |> where(room: ^room)
+      |> older_than(before)
+      |> order_by(desc: :inserted_at, desc: :id)
+      |> limit(^(limit + 1))
+      |> Repo.all()
+
+    {messages |> Enum.take(limit) |> Enum.reverse(), length(messages) > limit}
+  end
+
+  defp older_than(query, nil), do: query
+
+  defp older_than(query, %Message{inserted_at: at, id: id}) do
+    where(query, [m], m.inserted_at < ^at or (m.inserted_at == ^at and m.id < ^id))
   end
 
   @doc """

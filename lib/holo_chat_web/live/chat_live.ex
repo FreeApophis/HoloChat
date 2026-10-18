@@ -9,6 +9,7 @@ defmodule HoloChatWeb.ChatLive do
   @typing_timeout :timer.seconds(3)
   @max_avatars 5
   @room_list_size 20
+  @page_size 50
 
   # Literal class strings so Tailwind picks them up.
   @avatar_colors ~w(
@@ -118,65 +119,104 @@ defmodule HoloChatWeb.ChatLive do
           </div>
 
           <div
-            id="messages"
-            phx-update="stream"
+            id="message-scroller"
             phx-hook=".ScrollToBottom"
-            class="min-h-0 flex-1 space-y-1 overflow-y-auto px-4 py-4"
+            class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [overflow-anchor:none]"
           >
+            <div class="pb-2 text-center text-xs">
+              <button
+                :if={@more_messages?}
+                id="load-older"
+                phx-click="load_older"
+                phx-disable-with="Loading…"
+                class="rounded-full border border-base-300 px-3 py-1 opacity-70 transition hover:bg-base-200 hover:opacity-100"
+              >
+                Load older messages
+              </button>
+              <p :if={!@more_messages? && @has_messages?} id="history-start" class="opacity-50">
+                This is the beginning of #{@room}.
+              </p>
+            </div>
             <div
+              :if={!@has_messages?}
               id="messages-empty"
-              class="hidden h-full flex-col items-center justify-center gap-2 text-center opacity-60 only:flex"
+              class="flex flex-1 flex-col items-center justify-center gap-2 text-center opacity-60"
             >
               <.icon name="hero-sparkles" class="size-8" />
               <p class="text-sm">No messages in #{@room} yet. Say hi!</p>
             </div>
             <div
-              :for={{id, message} <- @streams.messages}
-              id={id}
-              class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
+              id="messages"
+              phx-update="stream"
+              phx-viewport-top={@more_messages? && "load_older"}
+              class="space-y-1"
             >
-              <div class={[
-                "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
-                avatar_color(message.username)
-              ]}>
-                {initial(message.username)}
-              </div>
-              <div class="min-w-0">
-                <div class="flex items-baseline gap-2">
-                  <span class="text-sm font-semibold">{message.username}</span>
-                  <time
-                    id={"message-time-#{message.id}"}
-                    datetime={DateTime.to_iso8601(message.inserted_at)}
-                    title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
-                    phx-hook=".LocalTime"
-                    phx-update="ignore"
-                    class="text-xs opacity-50"
-                  >
-                    {Calendar.strftime(message.inserted_at, "%H:%M")}
-                  </time>
+              <div
+                :for={{id, message} <- @streams.messages}
+                id={id}
+                class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
+              >
+                <div class={[
+                  "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
+                  avatar_color(message.username)
+                ]}>
+                  {initial(message.username)}
                 </div>
-                <p class="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>
+                <div class="min-w-0">
+                  <div class="flex items-baseline gap-2">
+                    <span class="text-sm font-semibold">{message.username}</span>
+                    <time
+                      id={"message-time-#{message.id}"}
+                      datetime={DateTime.to_iso8601(message.inserted_at)}
+                      title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+                      phx-hook=".LocalTime"
+                      phx-update="ignore"
+                      class="text-xs opacity-50"
+                    >
+                      {Calendar.strftime(message.inserted_at, "%H:%M")}
+                    </time>
+                  </div>
+                  <%!-- pre-wrap shows any whitespace, so the formatter must not indent the body --%>
+                  <p
+                    class="whitespace-pre-wrap break-words text-sm leading-relaxed"
+                    phx-no-format
+                  >{message.body}</p>
+                </div>
               </div>
             </div>
           </div>
           <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollToBottom">
+            // Keeps the message list pinned to the newest message while the reader is
+            // at the bottom, and keeps the visible messages still when older ones are
+            // inserted above them.
             export default {
               mounted() {
+                this.messages = this.el.querySelector("#messages")
                 this.scroll()
-                this.observer = new MutationObserver(() => {
-                  // Only follow new messages if the user hasn't scrolled up to read history.
-                  if (this.nearBottom) this.scroll()
-                })
-                this.el.addEventListener("scroll", () => this.trackPosition())
-                this.observer.observe(this.el, {childList: true})
-                this.trackPosition()
+                this.firstMessage = this.messages.firstElementChild
+                this.observer = new MutationObserver(() => this.onMessagesChanged())
+                this.observer.observe(this.messages, {childList: true})
+                this.el.addEventListener("scroll", () => this.remember())
+                this.handleEvent("chat:room-entered", () => this.scroll())
               },
               destroyed() { this.observer.disconnect() },
-              trackPosition() {
+              onMessagesChanged() {
+                const first = this.messages.firstElementChild
+                if (this.nearBottom) {
+                  this.scroll()
+                } else if (first !== this.firstMessage) {
+                  this.el.scrollTop = this.top + (this.el.scrollHeight - this.height)
+                }
+                this.firstMessage = first
+                this.remember()
+              },
+              remember() {
                 const el = this.el
+                this.top = el.scrollTop
+                this.height = el.scrollHeight
                 this.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
               },
-              scroll() { this.el.scrollTop = this.el.scrollHeight; this.nearBottom = true }
+              scroll() { this.el.scrollTop = this.el.scrollHeight; this.remember() }
             }
           </script>
           <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
@@ -327,7 +367,17 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:room_counts, Presence.room_counts())
     |> assign_presence()
     |> assign_message_form(%{})
-    |> stream(:messages, Chat.list_recent_messages(room), reset: true)
+    |> load_latest_messages()
+    |> push_event("chat:room-entered", %{})
+  end
+
+  defp load_latest_messages(socket) do
+    {messages, more?} = Chat.list_messages_page(socket.assigns.room, nil, @page_size)
+
+    socket
+    |> assign(oldest_message: List.first(messages), more_messages?: more?)
+    |> assign(:has_messages?, messages != [])
+    |> stream(:messages, messages, reset: true)
   end
 
   @impl true
@@ -361,6 +411,22 @@ defmodule HoloChatWeb.ChatLive do
     end
   end
 
+  # From the button or from scrolling to the top (phx-viewport-top).
+  def handle_event("load_older", _params, %{assigns: %{more_messages?: false}} = socket) do
+    {:noreply, socket}
+  end
+
+  def handle_event("load_older", _params, socket) do
+    %{room: room, oldest_message: oldest} = socket.assigns
+    {older, more?} = Chat.list_messages_page(room, oldest, @page_size)
+
+    {:noreply,
+     socket
+     |> assign(oldest_message: List.first(older) || oldest, more_messages?: more?)
+     # Inserting newest-first at index 0 leaves them in chronological order.
+     |> stream(:messages, Enum.reverse(older), at: 0)}
+  end
+
   def handle_event("switch_room", %{"room" => %{"name" => name}}, socket) do
     room = normalize_room(name)
 
@@ -373,7 +439,7 @@ defmodule HoloChatWeb.ChatLive do
 
   @impl true
   def handle_info({:new_message, %{room: room} = message}, %{assigns: %{room: room}} = socket) do
-    {:noreply, stream_insert(socket, :messages, message)}
+    {:noreply, socket |> assign(:has_messages?, true) |> stream_insert(:messages, message)}
   end
 
   # Still in flight from a room we just left.
