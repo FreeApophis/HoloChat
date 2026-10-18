@@ -14,7 +14,7 @@ This file adds the project's own rules on top. Where they are stricter, they win
 | Dev server (http://localhost:4000) | `mix phx.server` or `iex -S mix phx.server` |
 | All tests / one file / failed only | `mix test`, `mix test path/to/file_test.exs`, `mix test --failed` |
 | Quality gate (run before every commit) | `mix precommit` |
-| New migration | `mix ecto.gen.migration name_with_underscores`, then `mix ecto.migrate` |
+| New migration | `mix ecto.gen.migration name_with_underscores`, write it, then `mix ecto.migrate` |
 
 `mix precommit` runs, in order: `compile --warnings-as-errors` (including Boundary checks),
 `deps.unlock --unused`, `format`, `credo --strict`, `test`. Work is not done until it exits 0.
@@ -39,10 +39,11 @@ compile time. A violation is a compile warning, so it fails `mix precommit`.
 
 ```text
 HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
-HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence
-HoloChat               core; exports Chat, Chat.Message
+HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit
+HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message
 ├── HoloChat.Repo      sub-boundary; private to the core
-└── HoloChat.Chat      sub-boundary; deps: Repo; exports Message
+├── HoloChat.Accounts  sub-boundary; deps: Repo; exports User, Scope
+└── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
 ```
 
 Rules:
@@ -58,7 +59,12 @@ Rules:
   themselves. Presence and typing state are web-only concerns and live in `HoloChatWeb.Presence`.
 - Context functions return `{:ok, value}` or `{:error, changeset | reason}` for expected failures.
   Use bang functions only where a missing record is a bug.
-- Server-controlled fields (`room`, future `user_id`, ...) are set on the struct, never `cast`.
+- Server-controlled fields (`room`, `user_id`, `username` on messages, ...) are set on the struct,
+  never `cast`.
+- **Authorization goes through the scope.** Context functions that act for a user take
+  `%Accounts.Scope{}` as their first argument and derive the user from it (see
+  `Chat.create_message/3`); they return `{:error, :unauthorized}` for guests. LiveViews pass
+  `@current_scope`, never a user id or name from params.
 - Browser UI is LiveView. Non-browser clients will use Phoenix Channels. Both are thin adapters
   over the same context functions, and no business logic lives in either.
 - Never silence Boundary in `lib/` (no `dirty_xrefs`, no `check: [in: false, out: false]`). Only
@@ -91,13 +97,18 @@ Also:
 
 - Test files mirror `lib/` paths. Use `HoloChat.DataCase` for core tests and `HoloChatWeb.ConnCase`
   for web tests. Default to `async: true`.
-- **PubSub and Presence are global across async tests.** Any test asserting absence, counts or
-  presence must use its own room: `"name-#{System.unique_integer([:positive])}"`.
+- **PubSub, Presence and rate limits are global across async tests.** Any test asserting absence,
+  counts or presence must use its own room (`ChatFixtures.unique_room/0`). Every `ConnCase` conn has
+  its own client IP; build extra clients with `build_conn_with_unique_ip/0`, not `build_conn/0`.
+- Use unique usernames (`unique_username/0`). Concurrent test transactions inserting the same
+  username block each other on the unique index.
+- `mix test` runs pending migrations. Write a generated migration *before* running any test, or
+  the test DB records it as applied while empty (fix: `MIX_ENV=test mix ecto.reset`).
 - **No `Process.sleep`.** Synchronise on real signals: `assert_receive`, `:sys.get_state/1`, or the
   `await_presence/1` pattern in `test/holo_chat_web/live/chat_presence_test.exs`. For timers, send
   the timer message directly (`send(view.pid, :typing_timeout)`) instead of waiting.
 - Test data comes from plain fixture functions in `test/support/fixtures/<context>_fixtures.ex`
-  (e.g. `HoloChat.ChatFixtures`), built on the context's public API. Don't use factory libraries
+  (`HoloChat.AccountsFixtures`, `HoloChat.ChatFixtures`), built on the context's public API. Don't use factory libraries
   or insert through `Repo` directly.
 - Assert on outcomes via element IDs and `has_element?/3`, not on raw HTML or implementation details.
 - Before committing new or changed async/realtime tests, run the suite repeatedly to catch flakes:
