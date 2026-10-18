@@ -4,11 +4,12 @@ defmodule HoloChat.Accounts do
   email-free account recovery via single-use recovery codes.
   """
 
-  use Boundary, deps: [HoloChat.Repo], exports: [User, Scope]
+  use Boundary, deps: [HoloChat.Repo, HoloChat.Avatars], exports: [User, Scope]
 
   import Ecto.Query, warn: false
 
   alias HoloChat.Accounts.{RecoveryCode, Scope, User, UserToken}
+  alias HoloChat.Avatars
   alias HoloChat.Repo
 
   ## Database getters
@@ -61,6 +62,38 @@ defmodule HoloChat.Accounts do
   """
   def change_user_registration(user, attrs \\ %{}, opts \\ []) do
     User.registration_changeset(user, attrs, Keyword.put_new(opts, :hash_password, false))
+  end
+
+  ## Profile
+
+  @doc """
+  Returns a changeset for editing the user's public profile.
+  """
+  def change_user_profile(%User{} = user, attrs \\ %{}) do
+    User.profile_changeset(user, attrs)
+  end
+
+  @doc """
+  Updates the user's public profile (the description).
+  """
+  def update_user_profile(%User{} = user, attrs) do
+    user |> User.profile_changeset(attrs) |> Repo.update()
+  end
+
+  @doc """
+  Replaces the user's avatar with an uploaded image and deletes the old one.
+
+  Returns `{:error, :invalid_image}` if the upload can't be read, leaving the
+  current avatar in place.
+  """
+  def update_user_avatar(%User{} = user, image) when is_binary(image) do
+    Repo.transact(fn ->
+      with {:ok, avatar} <- Avatars.create_avatar(image),
+           {:ok, updated} <- user |> Ecto.Changeset.change(avatar_id: avatar.id) |> Repo.update() do
+        :ok = Avatars.delete_avatar(user.avatar_id)
+        {:ok, updated}
+      end
+    end)
   end
 
   ## Admins

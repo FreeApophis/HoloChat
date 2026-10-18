@@ -90,6 +90,7 @@ defmodule HoloChatWeb do
       import Phoenix.HTML
       # Core UI components
       import HoloChatWeb.CoreComponents
+      import HoloChatWeb.AvatarComponents
 
       # Common modules used in templates
       alias HoloChatWeb.Layouts

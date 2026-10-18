@@ -378,6 +378,58 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
+  describe "update_user_profile/2" do
+    test "saves a trimmed description" do
+      user = user_fixture()
+
+      assert {:ok, %User{description: "Amateur astronomer."}} =
+               Accounts.update_user_profile(user, %{"description" => "  Amateur astronomer. "})
+    end
+
+    test "limits the description to 500 characters" do
+      assert {:error, changeset} =
+               Accounts.update_user_profile(user_fixture(), %{
+                 "description" => String.duplicate("a", 501)
+               })
+
+      assert "should be at most 500 character(s)" in errors_on(changeset).description
+    end
+
+    test "only changes the description" do
+      user = user_fixture()
+
+      {:ok, updated} =
+        Accounts.update_user_profile(user, %{"username" => "renamed", "is_admin" => true})
+
+      assert updated.username == user.username
+      refute updated.is_admin
+    end
+  end
+
+  describe "update_user_avatar/2" do
+    import HoloChat.AvatarFixtures
+
+    test "stores the image as the user's avatar and deletes the previous one" do
+      user = user_fixture()
+
+      {:ok, user} = Accounts.update_user_avatar(user, image_binary(32, 32, {255, 0, 0}))
+      first = user.avatar_id
+      assert %HoloChat.Avatars.Avatar{} = HoloChat.Avatars.get_avatar(first)
+
+      {:ok, user} = Accounts.update_user_avatar(user, image_binary(32, 32, {0, 255, 0}))
+      assert user.avatar_id != first
+      assert HoloChat.Avatars.get_avatar(first) == nil
+      assert Accounts.get_user!(user.id).avatar_id == user.avatar_id
+    end
+
+    test "keeps the current avatar when the upload is not an image" do
+      {:ok, user} = Accounts.update_user_avatar(user_fixture(), image_binary(8, 8, {1, 1, 1}))
+
+      assert {:error, :invalid_image} = Accounts.update_user_avatar(user, "garbage")
+      assert Accounts.get_user!(user.id).avatar_id == user.avatar_id
+    end
+  end
+
   describe "set_admin/2" do
     test "grants and revokes admin rights by username" do
       user = user_fixture()

@@ -9,6 +9,8 @@ defmodule HoloChat.Accounts.User do
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :is_admin, :boolean, default: false
+    field :description, :string
+    field :avatar_id, :binary_id
     field :authenticated_at, :utc_datetime, virtual: true
 
     timestamps(type: :utc_datetime)
@@ -49,6 +51,17 @@ defmodule HoloChat.Accounts.User do
     else
       changeset
     end
+  end
+
+  @doc """
+  A user changeset for the public profile: the description. The avatar is
+  set by `HoloChat.Accounts.update_user_avatar/2`.
+  """
+  def profile_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:description])
+    |> update_change(:description, &String.trim/1)
+    |> validate_length(:description, max: 500)
   end
 
   @doc """

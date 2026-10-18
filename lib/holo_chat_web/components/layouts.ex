@@ -45,9 +45,19 @@ defmodule HoloChatWeb.Layouts do
         </.link>
         <nav class="flex items-center gap-2 text-sm sm:gap-3">
           <%= if @current_scope do %>
-            <span id="current-username" class="hidden font-medium sm:inline">
-              {@current_scope.user.username}
-            </span>
+            <.link
+              id="current-username"
+              navigate={~p"/users/profile"}
+              class="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 font-medium transition hover:bg-base-200"
+              title="Your profile"
+            >
+              <.avatar
+                name={@current_scope.user.username}
+                avatar_id={@current_scope.user.avatar_id}
+                class="size-7 text-xs"
+              />
+              <span class="hidden sm:inline">{@current_scope.user.username}</span>
+            </.link>
             <.link
               :if={@current_scope.user.is_admin}
               id="admin-link"
