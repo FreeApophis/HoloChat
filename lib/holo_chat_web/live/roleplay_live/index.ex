@@ -15,7 +15,12 @@ defmodule HoloChatWeb.RoleplayLive.Index do
               <.icon name="hero-sparkles" class="size-6 text-primary" /> Role-play
             </h1>
             <p class="mt-1 text-sm opacity-70">
-              Scenes run by their game masters. Step in and play a part.
+              Scenes run by their game masters. Step in and play a part, or browse the <.link
+                navigate={~p"/characters"}
+                class="font-medium text-primary hover:underline"
+              >
+                character library
+              </.link>.
             </p>
           </div>
           <.link
@@ -67,6 +72,7 @@ defmodule HoloChatWeb.RoleplayLive.Index do
               <div class="space-y-1 p-4">
                 <h2 class="truncate font-semibold">{room.title}</h2>
                 <p class="line-clamp-2 min-h-10 text-sm opacity-70">{room.topic}</p>
+                <.tags tags={room.tags} />
                 <p class="text-xs opacity-50">#{room.name}</p>
               </div>
             </.link>

@@ -59,6 +59,7 @@ defmodule HoloChatWeb.AvatarComponents do
     """
   end
 
+  defp initial(name) when name in [nil, ""], do: "?"
   defp initial(name), do: name |> String.first() |> String.upcase()
 
   defp color(name), do: Enum.at(@colors, :erlang.phash2(name, length(@colors)))

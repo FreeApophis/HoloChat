@@ -34,6 +34,15 @@ defmodule HoloChatWeb.RoleplayLive.New do
             placeholder="One line shown on the card and above the chat"
           />
           <.input
+            field={@form[:tag_list]}
+            type="text"
+            label="Tags"
+            placeholder="harry-potter, hogwarts"
+          />
+          <p class="-mt-1 mb-3 text-xs opacity-60">
+            Comma-separated. Characters with the same tags are suggested for the cast.
+          </p>
+          <.input
             field={@form[:scenario]}
             type="textarea"
             label="Scenario"

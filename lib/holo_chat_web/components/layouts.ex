@@ -53,6 +53,15 @@ defmodule HoloChatWeb.Layouts do
           >
             <.icon name="hero-sparkles" class="size-5" />
           </.link>
+          <.link
+            id="characters-nav-link"
+            navigate={~p"/characters"}
+            class="rounded-lg p-1.5 transition hover:bg-base-200"
+            aria-label="Characters"
+            title="Characters"
+          >
+            <.icon name="hero-user-group" class="size-5" />
+          </.link>
           <%= if @current_scope do %>
             <.link
               id="current-username"

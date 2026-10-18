@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.ChatLive do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.{Accounts, Assistant, Chat, Rooms}
+  alias HoloChat.{Accounts, Assistant, Characters, Chat, Rooms}
   alias HoloChat.Chat.Message
   alias HoloChatWeb.Presence
 
@@ -104,6 +104,29 @@ defmodule HoloChatWeb.ChatLive do
                 <p :if={@scene.topic} id="scene-topic" class="text-sm opacity-75">
                   {@scene.topic}
                 </p>
+                <div
+                  :if={@cast != []}
+                  id="scene-cast"
+                  class="mt-2 flex flex-wrap items-center gap-1.5"
+                  aria-label="Cast"
+                >
+                  <button
+                    :for={character <- @cast}
+                    type="button"
+                    phx-click="show_profile"
+                    phx-value-character-id={character.id}
+                    data-character-id={character.id}
+                    title={character.name}
+                    class="flex items-center gap-1.5 rounded-full bg-base-100/70 py-0.5 pr-2.5 pl-0.5 text-xs font-medium shadow-sm ring-1 ring-base-300/70 transition hover:bg-base-100"
+                  >
+                    <.avatar
+                      name={character.name}
+                      avatar_id={character.avatar_id}
+                      class="size-6 text-[0.65rem]"
+                    />
+                    {character.name}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -467,7 +490,7 @@ defmodule HoloChatWeb.ChatLive do
      socket
      |> assign(:room, nil)
      |> assign(:roleplay_rooms, Rooms.roleplay_room_names())
-     |> assign(scene: nil, can_manage_scene?: false, show_scenario?: false)
+     |> assign(scene: nil, cast: [], can_manage_scene?: false, show_scenario?: false)
      |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
      |> assign(:max_avatars, @max_avatars)
      |> assign(:me, presence_meta(socket.assigns.current_scope))
@@ -594,6 +617,10 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(oldest_message: List.first(older) || oldest, more_messages?: more?)
      # Inserting newest-first at index 0 leaves them in chronological order.
      |> stream(:messages, Enum.reverse(older), at: 0)}
+  end
+
+  def handle_event("show_profile", %{"character-id" => id}, socket) when id != "" do
+    {:noreply, assign(socket, :profile, character_profile(id))}
   end
 
   def handle_event("show_profile", %{"persona-id" => id}, socket) when id != "" do
@@ -751,6 +778,21 @@ defmodule HoloChatWeb.ChatLive do
     end
   end
 
+  defp character_profile(id) do
+    case Characters.get_character(id) do
+      nil ->
+        nil
+
+      character ->
+        %{
+          name: character.name,
+          avatar_id: character.avatar_id,
+          description: character.description,
+          assistant: false
+        }
+    end
+  end
+
   # Only public fields: never the system prompt.
   defp persona_profile(id) do
     case Assistant.get_persona(id) do
@@ -771,6 +813,7 @@ defmodule HoloChatWeb.ChatLive do
   defp assign_scene(socket, scene) do
     socket
     |> assign(:scene, scene)
+    |> assign(:cast, if(scene, do: Rooms.list_cast(scene), else: []))
     |> assign(
       :can_manage_scene?,
       scene != nil and Rooms.can_manage?(socket.assigns.current_scope, scene)

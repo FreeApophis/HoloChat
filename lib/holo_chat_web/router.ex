@@ -58,6 +58,10 @@ defmodule HoloChatWeb.Router do
       # rights are checked in the LiveView, since they are per room.
       live "/roleplay/new", RoleplayLive.New, :new
       live "/rooms/:room/settings", RoleplayLive.Settings, :edit
+
+      # Declared before the public /characters/:id so "new" is not an id.
+      live "/characters/new", CharacterLive.Form, :new
+      live "/characters/:id/edit", CharacterLive.Form, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password
@@ -84,6 +88,8 @@ defmodule HoloChatWeb.Router do
       live "/", ChatLive
       live "/rooms/:room", ChatLive
       live "/roleplay", RoleplayLive.Index, :index
+      live "/characters", CharacterLive.Index, :index
+      live "/characters/:id", CharacterLive.Show, :show
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new

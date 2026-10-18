@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.RoleplayLive.Settings do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.Rooms
+  alias HoloChat.{Characters, Rooms}
 
   @image_kinds [card_image: :card, background_image: :background]
 
@@ -23,6 +23,15 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
         <.form for={@form} id="scene-form" phx-change="validate" phx-submit="save">
           <.input field={@form[:title]} type="text" label="Title" />
           <.input field={@form[:topic]} type="text" label="Topic" />
+          <.input
+            field={@form[:tag_list]}
+            type="text"
+            label="Tags"
+            placeholder="harry-potter, hogwarts"
+          />
+          <p class="-mt-1 mb-3 text-xs opacity-60">
+            Comma-separated. Characters with the same tags are suggested for the cast.
+          </p>
           <.input field={@form[:scenario]} type="textarea" label="Scenario" rows="8" />
 
           <div class="mb-4 grid gap-4 sm:grid-cols-2">
@@ -43,6 +52,74 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
 
           <.button variant="primary" phx-disable-with="Saving…">Save scene</.button>
         </.form>
+
+        <section id="cast" class="space-y-4">
+          <div>
+            <h2 class="text-lg font-semibold">Cast</h2>
+            <p class="text-sm opacity-70">
+              Characters from the
+              <.link navigate={~p"/characters"} class="font-medium text-primary">library</.link>
+              who appear in this scene.
+            </p>
+          </div>
+
+          <ul
+            :if={@cast != []}
+            id="cast-members"
+            class="divide-y divide-base-300 rounded-xl border border-base-300"
+          >
+            <li
+              :for={character <- @cast}
+              id={"cast-member-#{character.id}"}
+              class="flex items-center gap-3 px-3 py-2"
+            >
+              <.avatar name={character.name} avatar_id={character.avatar_id} class="size-8 text-xs" />
+              <span class="flex-1 text-sm font-medium">{character.name}</span>
+              <button
+                id={"uncast-#{character.id}"}
+                type="button"
+                phx-click="uncast"
+                phx-value-id={character.id}
+                class="rounded-lg px-2 py-1 text-xs opacity-70 transition hover:bg-base-200 hover:opacity-100"
+              >
+                Remove
+              </button>
+            </li>
+          </ul>
+          <p :if={@cast == []} id="cast-empty" class="text-sm opacity-60">
+            Nobody is cast yet.
+          </p>
+
+          <div :if={@suggestions != []} id="suggested-characters" class="space-y-2">
+            <h3 class="text-sm font-semibold">Suggested for this scene</h3>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <.cast_candidate
+                :for={character <- @suggestions}
+                id={"suggestion-#{character.id}"}
+                character={character}
+                matching={@room.tags}
+              />
+            </div>
+          </div>
+
+          <.form for={@search_form} id="cast-search-form" phx-change="search" phx-submit="search">
+            <.input
+              field={@search_form[:query]}
+              type="search"
+              placeholder="Find any character by name…"
+              autocomplete="off"
+              phx-debounce="250"
+            />
+          </.form>
+          <div :if={@search_results != []} id="search-results" class="grid gap-2 sm:grid-cols-2">
+            <.cast_candidate
+              :for={character <- @search_results}
+              id={"search-result-#{character.id}"}
+              character={character}
+              matching={@room.tags}
+            />
+          </div>
+        </section>
 
         <section id="game-masters" class="space-y-3">
           <h2 class="text-lg font-semibold">Game masters</h2>
@@ -85,6 +162,31 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
         </section>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :character, :map, required: true
+  attr :matching, :list, required: true
+
+  defp cast_candidate(assigns) do
+    ~H"""
+    <div id={@id} class="flex items-center gap-3 rounded-xl border border-base-300 p-2">
+      <.avatar name={@character.name} avatar_id={@character.avatar_id} class="size-9 text-sm" />
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-medium">{@character.name}</p>
+        <.tags tags={Enum.filter(@character.tags, &(&1 in @matching))} />
+      </div>
+      <button
+        id={"cast-#{@character.id}"}
+        type="button"
+        phx-click="cast"
+        phx-value-id={@character.id}
+        class="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
+      >
+        <.icon name="hero-plus" class="size-3.5" /> Cast
+      </button>
+    </div>
     """
   end
 
@@ -136,7 +238,9 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
        |> assign(:page_title, "Scene settings")
        |> assign(:image_error, nil)
        |> assign(:master_form, to_form(%{"username" => ""}, as: :master))
-       |> assign_room(room)}
+       |> assign(:search_form, to_form(%{"query" => ""}, as: :search))
+       |> assign_room(room)
+       |> assign(:search_results, [])}
     else
       {:ok,
        socket
@@ -171,6 +275,18 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
     end
+  end
+
+  def handle_event("cast", %{"id" => id}, socket), do: change_cast(socket, :cast_character, id)
+
+  def handle_event("uncast", %{"id" => id}, socket),
+    do: change_cast(socket, :uncast_character, id)
+
+  def handle_event("search", %{"search" => %{"query" => query}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:search_form, to_form(%{"query" => query}, as: :search))
+     |> assign_search_results()}
   end
 
   def handle_event("add_master", %{"master" => %{"username" => username}}, socket) do
@@ -215,6 +331,22 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     end
   end
 
+  defp change_cast(socket, action, id) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case apply(Rooms, action, [scope, room, String.to_integer(id)]) do
+      {:ok, _room} ->
+        {:noreply, socket |> assign_cast() |> assign_search_results()}
+
+      {:error, :not_found} ->
+        {:noreply,
+         socket |> put_flash(:error, "That character no longer exists.") |> assign_cast()}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
+    end
+  end
+
   # Each uploaded image replaces the room's current one; the room returned
   # by the last update carries all new image ids.
   defp save_images(socket, room) do
@@ -244,6 +376,21 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     |> assign(:room, room)
     |> assign(:form, to_form(Rooms.change_room(room), as: :room))
     |> assign_masters()
+    |> assign_cast()
+  end
+
+  defp assign_cast(socket) do
+    room = socket.assigns.room
+
+    socket
+    |> assign(:cast, Rooms.list_cast(room))
+    |> assign(:suggestions, Rooms.suggest_cast(room))
+  end
+
+  defp assign_search_results(socket) do
+    cast_ids = Enum.map(socket.assigns.cast, & &1.id)
+    query = socket.assigns.search_form[:query].value || ""
+    assign(socket, :search_results, Characters.search_characters(query, cast_ids))
   end
 
   defp assign_masters(socket) do

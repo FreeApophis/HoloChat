@@ -3,6 +3,7 @@ defmodule HoloChat.RoomsTest do
 
   import HoloChat.AccountsFixtures
   import HoloChat.AvatarFixtures
+  import HoloChat.CharactersFixtures
   import HoloChat.ChatFixtures
   import HoloChat.RoomsFixtures
 
@@ -156,6 +157,56 @@ defmodule HoloChat.RoomsTest do
 
       assert {:error, :unauthorized} =
                Rooms.add_game_master(user_scope_fixture(), room, gm.user.username)
+    end
+  end
+
+  describe "tags" do
+    test "scenes take a comma-separated tag list" do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm, %{"tag_list" => "Harry Potter, Hogwarts"})
+      assert room.tags == ["harry-potter", "hogwarts"]
+
+      {:ok, room} = Rooms.update_room(gm, room, %{"tag_list" => "Discworld"})
+      assert room.tags == ["discworld"]
+    end
+  end
+
+  describe "the cast" do
+    setup do
+      gm = user_scope_fixture()
+      tag = unique_tag()
+      %{gm: gm, tag: tag, room: roleplay_room_fixture(gm, %{"tag_list" => tag})}
+    end
+
+    test "game masters cast and uncast library characters, announcing it",
+         %{gm: gm, room: room} do
+      character = character_fixture(user_scope_fixture())
+      Rooms.subscribe(room.name)
+
+      assert {:ok, _room} = Rooms.cast_character(gm, room, character.id)
+      assert {:ok, _room} = Rooms.cast_character(gm, room, character.id)
+      assert_receive {:room_updated, _}
+      assert [%{id: id}] = Rooms.list_cast(room)
+      assert id == character.id
+
+      assert {:ok, _room} = Rooms.uncast_character(gm, room, character.id)
+      assert Rooms.list_cast(room) == []
+    end
+
+    test "players cannot change the cast", %{room: room} do
+      character = character_fixture(user_scope_fixture())
+
+      assert {:error, :unauthorized} =
+               Rooms.cast_character(user_scope_fixture(), room, character.id)
+    end
+
+    test "suggest_cast/1 suggests tagged characters not yet cast",
+         %{gm: gm, room: room, tag: tag} do
+      cast = character_fixture(gm, %{"tag_list" => tag})
+      fitting = character_fixture(gm, %{"tag_list" => tag})
+      {:ok, _room} = Rooms.cast_character(gm, room, cast.id)
+
+      assert Enum.map(Rooms.suggest_cast(room), & &1.id) == [fitting.id]
     end
   end
 

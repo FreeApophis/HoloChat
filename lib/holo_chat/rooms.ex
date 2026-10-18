@@ -8,15 +8,15 @@ defmodule HoloChat.Rooms do
   """
 
   use Boundary,
-    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars, HoloChat.Chat],
+    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars, HoloChat.Characters, HoloChat.Chat],
     exports: [Room]
 
   import Ecto.Query, warn: false
 
-  alias HoloChat.{Accounts, Avatars, Chat}
+  alias HoloChat.{Accounts, Avatars, Characters, Chat}
   alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Repo
-  alias HoloChat.Rooms.{GameMaster, Room}
+  alias HoloChat.Rooms.{CastMember, GameMaster, Room}
 
   @pubsub HoloChat.PubSub
   @image_sizes %{card: {640, 360}, background: {1600, 900}}
@@ -98,7 +98,12 @@ defmodule HoloChat.Rooms do
   """
   def change_room(room, attrs \\ %{})
   def change_room(nil, attrs), do: Room.create_changeset(%Room{}, attrs)
-  def change_room(%Room{} = room, attrs), do: Room.changeset(room, attrs)
+
+  def change_room(%Room{} = room, attrs) do
+    room
+    |> Map.put(:tag_list, room.tag_list || Characters.Tags.format(room.tags))
+    |> Room.changeset(attrs)
+  end
 
   @doc """
   Returns true if the scope's user is one of the room's game masters.
@@ -206,6 +211,57 @@ defmodule HoloChat.Rooms do
           {:ok, :removed}
       end
     end)
+  end
+
+  @doc """
+  Returns the characters cast in the room, by name.
+  """
+  def list_cast(%Room{} = room), do: Characters.list_characters_by_ids(cast_ids(room))
+
+  @doc """
+  Suggests library characters for the room: those sharing its tags, most
+  shared tags first, leaving out the ones already cast.
+  """
+  def suggest_cast(%Room{} = room, limit \\ 12) do
+    Characters.suggest_characters(room.tags, cast_ids(room), limit)
+  end
+
+  @doc """
+  Casts a library character in the room and announces the change. Casting
+  someone twice is harmless.
+  """
+  def cast_character(scope, %Room{} = room, character_id) do
+    authorize(scope, room, fn ->
+      case Characters.get_character(character_id) do
+        nil ->
+          {:error, :not_found}
+
+        character ->
+          Repo.insert!(%CastMember{room_id: room.id, character_id: character.id},
+            on_conflict: :nothing
+          )
+
+          broadcast_update({:ok, room})
+      end
+    end)
+  end
+
+  @doc """
+  Removes a character from the room's cast and announces the change.
+  """
+  def uncast_character(scope, %Room{} = room, character_id) do
+    authorize(scope, room, fn ->
+      Repo.delete_all(
+        from cm in CastMember,
+          where: cm.room_id == ^room.id and cm.character_id == ^character_id
+      )
+
+      broadcast_update({:ok, room})
+    end)
+  end
+
+  defp cast_ids(%Room{id: room_id}) do
+    Repo.all(from cm in CastMember, where: cm.room_id == ^room_id, select: cm.character_id)
   end
 
   defp authorize(scope, room, fun) do

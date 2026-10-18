@@ -4,12 +4,16 @@ defmodule HoloChat.Rooms.Room do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias HoloChat.Characters.Tags
+
   schema "rooms" do
     field :name, :string
     field :kind, :string, default: "roleplay"
     field :title, :string
     field :topic, :string
     field :scenario, :string
+    field :tags, {:array, :string}, default: []
+    field :tag_list, :string, virtual: true
     field :card_image_id, :binary_id
     field :background_image_id, :binary_id
 
@@ -34,6 +38,7 @@ defmodule HoloChat.Rooms.Room do
   def changeset(room, attrs) do
     room
     |> cast(attrs, [:title, :topic, :scenario])
+    |> Tags.cast_tag_list(attrs)
     |> update_change(:title, &String.trim/1)
     |> validate_required([:title])
     |> validate_length(:title, max: 60)
