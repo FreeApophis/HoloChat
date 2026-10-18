@@ -14,6 +14,7 @@ defmodule HoloChat.Chat do
 
   @pubsub HoloChat.PubSub
   @rooms_topic "rooms"
+  @max_body_length 2000
   @room_format ~r/\A[a-z0-9][a-z0-9-]{0,31}\z/
 
   @doc """
@@ -106,14 +107,7 @@ defmodule HoloChat.Chat do
     |> Repo.insert()
     |> case do
       {:ok, message} ->
-        Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
-
-        Phoenix.PubSub.broadcast(
-          @pubsub,
-          @rooms_topic,
-          {:room_activity, room, message.inserted_at}
-        )
-
+        broadcast_new_message(message)
         {:ok, message}
 
       error ->
@@ -122,6 +116,34 @@ defmodule HoloChat.Chat do
   end
 
   def create_message(_scope, _room, _attrs), do: {:error, :unauthorized}
+
+  defp broadcast_new_message(%Message{room: room} = message) do
+    Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
+    Phoenix.PubSub.broadcast(@pubsub, @rooms_topic, {:room_activity, room, message.inserted_at})
+  end
+
+  @doc """
+  Posts a reply from the AI assistant named `name` and broadcasts it.
+
+  Replies longer than a message may be are shortened.
+  """
+  def create_assistant_message(room, name, body) do
+    %Message{room: room, username: name, from_assistant: true}
+    |> Message.changeset(%{body: truncate(body, @max_body_length)})
+    |> Repo.insert()
+    |> case do
+      {:ok, message} ->
+        broadcast_new_message(message)
+        {:ok, message}
+
+      error ->
+        error
+    end
+  end
+
+  defp truncate(text, max) do
+    if String.length(text) > max, do: String.slice(text, 0, max - 1) <> "…", else: text
+  end
 
   @doc """
   Returns a changeset for tracking message form changes.

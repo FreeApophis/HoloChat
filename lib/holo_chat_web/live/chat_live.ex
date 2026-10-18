@@ -158,13 +158,27 @@ defmodule HoloChatWeb.ChatLive do
               >
                 <div class={[
                   "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
-                  avatar_color(message.username)
+                  if(message.from_assistant,
+                    do: "bg-gradient-to-br from-violet-500 to-fuchsia-500",
+                    else: avatar_color(message.username)
+                  )
                 ]}>
-                  {initial(message.username)}
+                  <%= if message.from_assistant do %>
+                    <.icon name="hero-sparkles" class="size-5" />
+                  <% else %>
+                    {initial(message.username)}
+                  <% end %>
                 </div>
                 <div class="min-w-0">
                   <div class="flex items-baseline gap-2">
                     <span class="text-sm font-semibold">{message.username}</span>
+                    <span
+                      :if={message.from_assistant}
+                      data-role="assistant-badge"
+                      class="rounded bg-violet-500/15 px-1 text-[0.65rem] font-semibold tracking-wide text-violet-600"
+                    >
+                      AI
+                    </span>
                     <time
                       id={"message-time-#{message.id}"}
                       datetime={DateTime.to_iso8601(message.inserted_at)}

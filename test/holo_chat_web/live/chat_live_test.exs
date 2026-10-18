@@ -120,6 +120,17 @@ defmodule HoloChatWeb.ChatLiveTest do
            )
   end
 
+  test "marks messages from the AI assistant", %{conn: conn} do
+    room = unique_room()
+    {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Beep boop")
+    human = message_fixture(user_scope_fixture(), room)
+
+    {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
+
+    assert has_element?(view, "#messages-#{reply.id} [data-role='assistant-badge']", "AI")
+    refute has_element?(view, "#messages-#{human.id} [data-role='assistant-badge']")
+  end
+
   test "messages stay in their room", %{conn: conn} do
     room = unique_room()
     {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")

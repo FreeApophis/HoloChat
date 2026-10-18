@@ -7,5 +7,16 @@ defmodule HoloChat do
   if it comes from the database, an external API or others.
   """
 
-  use Boundary, deps: [], exports: [Accounts, Accounts.User, Accounts.Scope, Chat, Chat.Message]
+  use Boundary,
+    deps: [],
+    exports: [
+      Accounts,
+      Accounts.User,
+      Accounts.Scope,
+      Assistant,
+      Assistant.Settings,
+      Assistant.Server,
+      Chat,
+      Chat.Message
+    ]
 end

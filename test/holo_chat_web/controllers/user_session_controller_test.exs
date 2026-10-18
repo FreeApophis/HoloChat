@@ -24,6 +24,19 @@ defmodule HoloChatWeb.UserSessionControllerTest do
       assert has_element?(view, "#settings-link")
       assert has_element?(view, "#logout-link")
       refute has_element?(view, "#login-link")
+      refute has_element?(view, "#admin-link")
+    end
+
+    test "shows admins the admin link", %{conn: conn, user: user} do
+      {:ok, _} = Accounts.set_admin(user.username, true)
+
+      conn =
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"username" => user.username, "password" => valid_user_password()}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/")
+      assert has_element?(view, "#admin-link[href='/admin/assistant']")
     end
 
     test "ignores the case of the username", %{conn: conn, user: user} do

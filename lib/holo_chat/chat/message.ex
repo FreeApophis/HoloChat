@@ -8,6 +8,7 @@ defmodule HoloChat.Chat.Message do
     field :room, :string
     field :username, :string
     field :body, :string
+    field :from_assistant, :boolean, default: false
     belongs_to :user, HoloChat.Accounts.User
 
     timestamps(type: :utc_datetime_usec)

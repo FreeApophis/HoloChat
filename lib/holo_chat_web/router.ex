@@ -52,6 +52,16 @@ defmodule HoloChatWeb.Router do
     post "/users/update-password", UserSessionController, :update_password
   end
 
+  ## Admin routes (admins are granted with `mix holo_chat.admin`)
+
+  scope "/admin", HoloChatWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :require_admin, on_mount: [{HoloChatWeb.UserAuth, :require_admin}] do
+      live "/assistant", AdminLive.Assistant, :edit
+    end
+  end
+
   scope "/", HoloChatWeb do
     pipe_through [:browser]
 

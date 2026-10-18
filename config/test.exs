@@ -42,3 +42,11 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# The assistant talks to a Mox mock in tests, and the lobby assistant
+# server is started per test (see HoloChat.Assistant.Server) instead.
+config :holo_chat, :assistant_llm, HoloChat.Assistant.LLMMock
+config :holo_chat, :start_assistant, false
+
+config :holo_chat, HoloChat.Assistant.OpenAICompatibleClient,
+  req_options: [plug: {Req.Test, HoloChat.Assistant.OpenAICompatibleClient}, retry: false]

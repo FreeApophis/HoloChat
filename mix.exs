@@ -42,6 +42,7 @@ defmodule HoloChat.MixProject do
     [
       {:pbkdf2_elixir, "~> 2.0"},
       {:hammer, "~> 7.5"},
+      {:mox, "~> 1.3", only: :test},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},

@@ -56,6 +56,31 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "create_assistant_message/3" do
+    test "stores and broadcasts a message from the assistant", %{room: room} do
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{} = message} =
+               Chat.create_assistant_message(room, "Holo", "Hi there!")
+
+      assert message.from_assistant
+      assert message.username == "Holo"
+      assert is_nil(message.user_id)
+      assert_receive {:new_message, ^message}
+    end
+
+    test "shortens replies that are too long", %{room: room} do
+      {:ok, message} = Chat.create_assistant_message(room, "Holo", String.duplicate("a", 3000))
+
+      assert String.length(message.body) == 2000
+      assert String.ends_with?(message.body, "…")
+    end
+
+    test "messages from people are not from the assistant", %{scope: scope, room: room} do
+      refute message_fixture(scope, room).from_assistant
+    end
+  end
+
   describe "list_recent_messages/2" do
     test "returns only the room's messages, oldest first, capped at the limit",
          %{scope: scope, room: room} do

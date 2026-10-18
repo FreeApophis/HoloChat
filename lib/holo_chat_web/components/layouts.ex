@@ -49,6 +49,16 @@ defmodule HoloChatWeb.Layouts do
               {@current_scope.user.username}
             </span>
             <.link
+              :if={@current_scope.user.is_admin}
+              id="admin-link"
+              navigate={~p"/admin/assistant"}
+              class="rounded-lg p-1.5 transition hover:bg-base-200"
+              aria-label="Admin"
+              title="Admin"
+            >
+              <.icon name="hero-wrench-screwdriver" class="size-5" />
+            </.link>
+            <.link
               id="settings-link"
               navigate={~p"/users/settings"}
               class="rounded-lg p-1.5 transition hover:bg-base-200"
