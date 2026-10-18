@@ -104,6 +104,12 @@ Also:
   username block each other on the unique index.
 - `mix test` runs pending migrations. Write a generated migration *before* running any test, or
   the test DB records it as applied while empty (fix: `MIX_ENV=test mix ecto.reset`).
+- Don't make a test depend on views of shared state that other tests can change: the room list
+  (top 20 rooms by activity across all tests), online counts, ordering of global lists. Navigate
+  with `render_patch/2` unless the sidebar itself is under test, and compare only your own rooms
+  (relative order, presence of your ids), never absolute positions or totals.
+- Ordering by timestamp alone is not deterministic: the Windows clock can give consecutive rows
+  the same `inserted_at`. Always add the id as a tie-breaker.
 - **No `Process.sleep`.** Synchronise on real signals: `assert_receive`, `:sys.get_state/1`, or the
   `await_presence/1` pattern in `test/holo_chat_web/live/chat_presence_test.exs`. For timers, send
   the timer message directly (`send(view.pid, :typing_timeout)`) instead of waiting.
@@ -128,6 +134,8 @@ Also:
 
 - Credo runs with `--strict` using `.credo.exs`. Fix findings instead of disabling them. An inline
   `# credo:disable-for-next-line` needs a comment explaining why.
+- `mix format` re-wraps HEEx. Where whitespace is visible (`whitespace-pre-wrap`, `<pre>`), put
+  the content on the tag's line and add `phx-no-format`, or the indentation shows up in the UI.
 - After deleting or renaming files, Boundary can keep reporting stale warnings. `mix compile --force`
   clears them.
 - New dependencies need a reason. Prefer what is already included (`Req` for HTTP, standard
