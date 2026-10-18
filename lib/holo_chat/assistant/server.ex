@@ -139,12 +139,12 @@ defmodule HoloChat.Assistant.Server do
   end
 
   defp post_reply({:ok, reply}, persona, message) do
-    Chat.create_assistant_message(message.room, persona.name, reply)
+    Chat.create_assistant_message(message.room, persona.name, reply, persona_id: persona.id)
   end
 
   defp post_reply({:error, reason}, persona, message) do
     Logger.warning("Assistant #{persona.name} could not answer: #{inspect(reason)}")
-    Chat.create_assistant_message(message.room, persona.name, @apology)
+    Chat.create_assistant_message(message.room, persona.name, @apology, persona_id: persona.id)
   end
 
   # Announces every room/persona pair that is online, and takes pairs

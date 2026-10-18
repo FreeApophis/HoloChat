@@ -65,6 +65,60 @@ defmodule HoloChatWeb.AdminLive.PersonaFormTest do
     end
   end
 
+  describe "persona profile" do
+    import HoloChat.AvatarFixtures
+
+    setup %{conn: conn} do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+      {:ok, persona} = Assistant.create_persona(user_scope_fixture(admin), %{"name" => "Sage"})
+      %{conn: log_in_user(conn, admin), persona: persona}
+    end
+
+    test "saves the public description", %{conn: conn, persona: persona} do
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant/personas/#{persona.id}/edit")
+
+      view
+      |> form("#persona-form", persona: %{description: "Your friendly code reviewer."})
+      |> render_submit()
+
+      assert Assistant.get_persona!(persona.id).description == "Your friendly code reviewer."
+    end
+
+    test "uploads an avatar", %{conn: conn, persona: persona} do
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant/personas/#{persona.id}/edit")
+
+      avatar =
+        file_input(view, "#persona-form", :avatar, [
+          %{
+            name: "sage.jpg",
+            content: image_binary(48, 48, {20, 120, 60}, :jpg),
+            type: "image/jpeg"
+          }
+        ])
+
+      render_upload(avatar, "sage.jpg")
+      view |> form("#persona-form") |> render_submit()
+
+      assert Assistant.get_persona!(persona.id).avatar_id
+    end
+
+    test "shows avatars in the overview", %{conn: conn, persona: persona} do
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant/personas/#{persona.id}/edit")
+
+      avatar =
+        file_input(view, "#persona-form", :avatar, [
+          %{name: "sage.png", content: image_binary(8, 8, {1, 1, 1}), type: "image/png"}
+        ])
+
+      render_upload(avatar, "sage.png")
+      view |> form("#persona-form") |> render_submit()
+      avatar_id = Assistant.get_persona!(persona.id).avatar_id
+
+      {:ok, overview, _html} = live(conn, ~p"/admin/assistant")
+      assert has_element?(overview, "#persona-#{persona.id} img[src='/avatars/#{avatar_id}']")
+    end
+  end
+
   describe "overview actions" do
     setup %{conn: conn} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)

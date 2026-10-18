@@ -6,13 +6,14 @@ defmodule HoloChat.Assistant do
   """
 
   use Boundary,
-    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Chat],
+    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars, HoloChat.Chat],
     exports: [Settings, Persona, LLM, Server]
 
   import Ecto.Query, warn: false
 
   alias HoloChat.Accounts
   alias HoloChat.Assistant.{LLM, Persona, Settings}
+  alias HoloChat.Avatars
   alias HoloChat.Repo
 
   @pubsub HoloChat.PubSub
@@ -97,11 +98,38 @@ defmodule HoloChat.Assistant do
   end
 
   @doc """
-  Deletes a persona (admins only) and notifies subscribers.
+  Deletes a persona and its avatar (admins only) and notifies subscribers.
   """
   def delete_persona(scope, %Persona{} = persona) do
     with :ok <- authorize(scope) do
-      persona |> Repo.delete() |> notify_personas_changed()
+      Repo.transact(fn -> delete_persona_and_avatar(persona) end)
+      |> notify_personas_changed()
+    end
+  end
+
+  @doc """
+  Replaces the persona's avatar with an uploaded image (admins only) and
+  deletes the old one. Returns `{:error, :invalid_image}` for unreadable uploads.
+  """
+  def update_persona_avatar(scope, %Persona{} = persona, image) when is_binary(image) do
+    with :ok <- authorize(scope) do
+      Repo.transact(fn -> replace_persona_avatar(persona, image) end)
+      |> notify_personas_changed()
+    end
+  end
+
+  defp delete_persona_and_avatar(persona) do
+    with {:ok, deleted} <- Repo.delete(persona) do
+      :ok = Avatars.delete_avatar(persona.avatar_id)
+      {:ok, deleted}
+    end
+  end
+
+  defp replace_persona_avatar(persona, image) do
+    with {:ok, avatar} <- Avatars.create_avatar(image),
+         {:ok, updated} <- persona |> Ecto.Changeset.change(avatar_id: avatar.id) |> Repo.update() do
+      :ok = Avatars.delete_avatar(persona.avatar_id)
+      {:ok, updated}
     end
   end
 

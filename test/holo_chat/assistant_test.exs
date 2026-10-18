@@ -145,6 +145,63 @@ defmodule HoloChat.AssistantTest do
     end
   end
 
+  describe "persona profiles" do
+    import HoloChat.AvatarFixtures
+
+    test "have a public description of up to 500 characters", %{admin: admin} do
+      {:ok, persona} =
+        Assistant.create_persona(admin, %{"name" => "Sage", "description" => " Reviews code. "})
+
+      assert persona.description == "Reviews code."
+
+      assert {:error, changeset} =
+               Assistant.update_persona(admin, persona, %{
+                 "description" => String.duplicate("a", 501)
+               })
+
+      assert "should be at most 500 character(s)" in errors_on(changeset).description
+    end
+
+    test "update_persona_avatar/3 replaces the avatar and deletes the old one", %{admin: admin} do
+      {:ok, persona} = Assistant.create_persona(admin, %{"name" => "Sage"})
+      Assistant.subscribe()
+
+      {:ok, persona} =
+        Assistant.update_persona_avatar(admin, persona, image_binary(16, 16, {1, 2, 3}))
+
+      first = persona.avatar_id
+      assert HoloChat.Avatars.get_avatar(first)
+      assert_receive {:assistant_personas_changed}
+
+      {:ok, persona} =
+        Assistant.update_persona_avatar(admin, persona, image_binary(16, 16, {3, 2, 1}))
+
+      assert persona.avatar_id != first
+      assert HoloChat.Avatars.get_avatar(first) == nil
+    end
+
+    test "update_persona_avatar/3 rejects non-images and non-admins",
+         %{admin: admin, member: member} do
+      {:ok, persona} = Assistant.create_persona(admin, %{"name" => "Sage"})
+
+      assert {:error, :invalid_image} = Assistant.update_persona_avatar(admin, persona, "nope")
+
+      assert {:error, :unauthorized} =
+               Assistant.update_persona_avatar(member, persona, image_binary(4, 4, {0, 0, 0}))
+    end
+
+    test "deleting a persona deletes its avatar", %{admin: admin} do
+      {:ok, persona} = Assistant.create_persona(admin, %{"name" => "Sage"})
+
+      {:ok, persona} =
+        Assistant.update_persona_avatar(admin, persona, image_binary(8, 8, {5, 5, 5}))
+
+      {:ok, _} = Assistant.delete_persona(admin, persona)
+
+      assert HoloChat.Avatars.get_avatar(persona.avatar_id) == nil
+    end
+  end
+
   describe "list_personas/0" do
     test "lists personas by name", %{admin: admin} do
       for name <- ~w(Sage Holo), do: Assistant.create_persona(admin, %{"name" => name})

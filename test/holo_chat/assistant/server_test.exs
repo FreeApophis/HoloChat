@@ -23,7 +23,8 @@ defmodule HoloChat.Assistant.ServerTest do
     %{admin: admin, member: user_scope_fixture(), room: room, holo: holo}
   end
 
-  test "answers a mention in the persona's room", %{admin: admin, member: member, room: room} do
+  test "answers a mention in the persona's room",
+       %{admin: admin, member: member, room: room, holo: holo} do
     enable(admin)
     start_server()
 
@@ -37,8 +38,10 @@ defmodule HoloChat.Assistant.ServerTest do
     message_fixture(member, room, %{"body" => "@Holo hi"})
 
     assert_receive {:new_message,
-                    %{from_assistant: true, username: "Holo", body: "Hello there!"}},
+                    %{from_assistant: true, username: "Holo", body: "Hello there!"} = reply},
                    1000
+
+    assert reply.persona_id == holo.id
   end
 
   test "ignores messages that don't mention a persona",

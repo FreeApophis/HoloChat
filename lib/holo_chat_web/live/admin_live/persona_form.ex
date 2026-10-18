@@ -25,7 +25,36 @@ defmodule HoloChatWeb.AdminLive.PersonaForm do
           phx-submit="save"
           class="space-y-1"
         >
+          <div class="mb-4 flex items-center gap-4">
+            <.avatar
+              id="persona-avatar"
+              name={@persona.name || "?"}
+              avatar_id={@persona.avatar_id}
+              assistant
+              class="size-20 text-2xl"
+            />
+            <div class="min-w-0 flex-1 space-y-1 text-sm">
+              <label class="font-medium" for={@uploads.avatar.ref}>Avatar</label>
+              <.live_file_input upload={@uploads.avatar} class="file-input file-input-sm w-full" />
+              <p class="text-xs opacity-60">
+                PNG, JPEG or GIF, up to 5 MB. It is cropped to a square.
+              </p>
+              <p :for={entry <- @uploads.avatar.entries} class="text-xs">
+                {entry.client_name}
+                <span :for={error <- upload_errors(@uploads.avatar, entry)} class="text-error">
+                  – {upload_error(error)}
+                </span>
+              </p>
+            </div>
+          </div>
+
           <.input field={@form[:name]} type="text" label="Name (answers to @Name)" />
+          <.input
+            field={@form[:description]}
+            type="textarea"
+            label="Public description (shown on its profile card)"
+            rows="2"
+          />
           <.input
             field={@form[:rooms]}
             value={rooms_text(@form[:rooms].value)}
@@ -77,7 +106,12 @@ defmodule HoloChatWeb.AdminLive.PersonaForm do
      socket
      |> assign(:persona, persona)
      |> assign(:page_title, page_title(socket.assigns.live_action, persona))
-     |> assign_form(Assistant.change_persona(persona))}
+     |> assign_form(Assistant.change_persona(persona))
+     |> allow_upload(:avatar,
+       accept: ~w(.png .jpg .jpeg .gif),
+       max_entries: 1,
+       max_file_size: 5_000_000
+     )}
   end
 
   @impl true
@@ -91,15 +125,43 @@ defmodule HoloChatWeb.AdminLive.PersonaForm do
   end
 
   def handle_event("save", %{"persona" => params}, socket) do
-    case save(socket, parse_rooms(params)) do
-      {:ok, _persona} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Persona saved.")
-         |> push_navigate(to: ~p"/admin/assistant")}
-
+    with {:ok, persona} <- save(socket, parse_rooms(params)),
+         {:ok, _persona} <- save_avatar(socket, persona) do
+      {:noreply,
+       socket
+       |> put_flash(:info, "Persona saved.")
+       |> push_navigate(to: ~p"/admin/assistant")}
+    else
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
+
+      # The persona itself was saved; continue on its edit page.
+      {:error, :invalid_image, persona} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :error,
+           "Persona saved, but the uploaded file could not be read as an image."
+         )
+         |> push_navigate(to: ~p"/admin/assistant/personas/#{persona.id}/edit")}
+    end
+  end
+
+  defp save_avatar(socket, persona) do
+    images =
+      consume_uploaded_entries(socket, :avatar, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end)
+
+    case images do
+      [] ->
+        {:ok, persona}
+
+      [image] ->
+        case Assistant.update_persona_avatar(socket.assigns.current_scope, persona, image) do
+          {:error, :invalid_image} -> {:error, :invalid_image, persona}
+          result -> result
+        end
     end
   end
 
@@ -125,6 +187,11 @@ defmodule HoloChatWeb.AdminLive.PersonaForm do
 
   defp rooms_text(rooms) when is_list(rooms), do: Enum.join(rooms, ", ")
   defp rooms_text(rooms), do: rooms
+
+  defp upload_error(:too_large), do: "larger than 5 MB"
+  defp upload_error(:not_accepted), do: "not a PNG, JPEG or GIF"
+  defp upload_error(:too_many_files), do: "only one image at a time"
+  defp upload_error(error), do: inspect(error)
 
   defp page_title(:new, _persona), do: "New persona"
   defp page_title(:edit, persona), do: "Edit @#{persona.name}"

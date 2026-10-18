@@ -56,6 +56,18 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "create_assistant_message/4" do
+    test "records which persona wrote the message", %{room: room} do
+      {:ok, admin} = HoloChat.Accounts.set_admin(user_fixture().username, true)
+
+      {:ok, holo} =
+        HoloChat.Assistant.create_persona(user_scope_fixture(admin), %{"name" => "Holo"})
+
+      {:ok, message} = Chat.create_assistant_message(room, "Holo", "Hi", persona_id: holo.id)
+      assert message.persona_id == holo.id
+    end
+  end
+
   describe "create_assistant_message/3" do
     test "stores and broadcasts a message from the assistant", %{room: room} do
       Chat.subscribe(room)

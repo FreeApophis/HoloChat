@@ -21,24 +21,36 @@ defmodule HoloChat.Assistant.Persona do
     field :max_tokens, :integer, default: 512
     field :temperature, :float, default: 0.7
     field :rooms, {:array, :string}, default: []
+    field :description, :string
+    field :avatar_id, :binary_id
 
     timestamps(type: :utc_datetime)
   end
 
-  @fields [:name, :system_prompt, :context_messages, :max_tokens, :temperature, :rooms]
+  @fields [
+    :name,
+    :description,
+    :system_prompt,
+    :context_messages,
+    :max_tokens,
+    :temperature,
+    :rooms
+  ]
 
   def changeset(persona, attrs) do
     persona
     |> cast(attrs, @fields)
     |> update_change(:name, &String.trim/1)
     |> update_change(:rooms, &normalize_rooms/1)
-    |> validate_required(@fields -- [:rooms])
+    |> update_change(:description, &String.trim/1)
+    |> validate_required(@fields -- [:rooms, :description])
     |> validate_length(:name, min: 2, max: 20)
     |> validate_format(:name, ~r/\A[a-zA-Z0-9_]+\z/,
       message: "may only contain letters, digits and underscores"
     )
     |> unsafe_validate_unique(:name, HoloChat.Repo)
     |> unique_constraint(:name)
+    |> validate_length(:description, max: 500)
     |> validate_length(:system_prompt, max: 4000)
     |> validate_number(:context_messages, greater_than_or_equal_to: 1, less_than_or_equal_to: 50)
     |> validate_number(:max_tokens, greater_than_or_equal_to: 16, less_than_or_equal_to: 4096)

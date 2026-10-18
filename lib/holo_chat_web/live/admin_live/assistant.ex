@@ -105,6 +105,12 @@ defmodule HoloChatWeb.AdminLive.Assistant do
               id={"persona-#{persona.id}"}
               class="flex items-center gap-3 px-3 py-2 text-sm"
             >
+              <.avatar
+                name={persona.name}
+                avatar_id={persona.avatar_id}
+                assistant
+                class="size-7 text-xs"
+              />
               <span class="font-semibold">@{persona.name}</span>
               <span class="min-w-0 flex-1 truncate opacity-70">
                 {if persona.rooms == [],

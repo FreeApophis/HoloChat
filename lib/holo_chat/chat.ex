@@ -125,10 +125,11 @@ defmodule HoloChat.Chat do
   @doc """
   Posts a reply from the AI assistant named `name` and broadcasts it.
 
-  Replies longer than a message may be are shortened.
+  Replies longer than a message may be are shortened. Pass `persona_id:` to
+  record which persona wrote it.
   """
-  def create_assistant_message(room, name, body) do
-    %Message{room: room, username: name, from_assistant: true}
+  def create_assistant_message(room, name, body, opts \\ []) do
+    %Message{room: room, username: name, from_assistant: true, persona_id: opts[:persona_id]}
     |> Message.changeset(%{body: truncate(body, @max_body_length)})
     |> Repo.insert()
     |> case do
