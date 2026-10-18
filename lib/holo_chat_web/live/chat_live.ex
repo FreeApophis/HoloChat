@@ -3,8 +3,11 @@ defmodule HoloChatWeb.ChatLive do
 
   alias HoloChat.Chat
   alias HoloChat.Chat.Message
+  alias HoloChatWeb.Presence
 
   @default_room "lobby"
+  @typing_timeout :timer.seconds(3)
+  @max_avatars 5
 
   # Literal class strings so Tailwind picks them up.
   @avatar_colors ~w(
@@ -18,10 +21,33 @@ defmodule HoloChatWeb.ChatLive do
     <Layouts.app flash={@flash}>
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
-          <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
-            <.icon name="hero-hashtag" class="size-4 opacity-60" />
-            {@room}
-          </h1>
+          <div class="flex items-center gap-3">
+            <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
+              <.icon name="hero-hashtag" class="size-4 opacity-60" />
+              {@room}
+            </h1>
+            <div
+              id="online-users"
+              class="flex items-center gap-2"
+              title={online_summary(@online_names, @guest_count)}
+            >
+              <div class="flex -space-x-1.5">
+                <div
+                  :for={name <- Enum.take(@online_names, @max_avatars)}
+                  class={[
+                    "grid size-6 place-items-center rounded-full text-[0.65rem] font-semibold text-white ring-2 ring-base-100",
+                    avatar_color(name)
+                  ]}
+                >
+                  {initial(name)}
+                </div>
+              </div>
+              <span id="online-count" class="flex items-center gap-1.5 text-xs opacity-70">
+                <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span>
+                {length(@online_names) + @guest_count} online
+              </span>
+            </div>
+          </div>
           <.form
             for={@room_form}
             id="room-form"
@@ -107,12 +133,27 @@ defmodule HoloChatWeb.ChatLive do
           }
         </script>
 
+        <div
+          id="typing-indicator"
+          class="flex h-6 items-center gap-2 px-5 text-xs opacity-70"
+          aria-live="polite"
+        >
+          <%= if @typing_names != [] do %>
+            <span class="flex items-center gap-0.5" aria-hidden="true">
+              <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]"></span>
+              <span class="size-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]"></span>
+              <span class="size-1 animate-bounce rounded-full bg-current"></span>
+            </span>
+            <span>{typing_text(@typing_names)}</span>
+          <% end %>
+        </div>
+
         <.form
           for={@form}
           id="message-form"
           phx-change="validate"
           phx-submit="send"
-          class="flex flex-col gap-2 border-t border-base-300 p-3 sm:flex-row sm:items-start"
+          class="flex flex-col gap-2 border-t border-base-300 px-3 pt-3 sm:flex-row sm:items-start"
         >
           <div class="sm:w-40">
             <.input
@@ -144,13 +185,23 @@ defmodule HoloChatWeb.ChatLive do
     room = Map.get(params, "room", @default_room)
 
     if Chat.valid_room?(room) do
-      if connected?(socket), do: Chat.subscribe(room)
+      me = %{name: nil, typing: false}
+
+      if connected?(socket) do
+        Chat.subscribe(room)
+        Presence.subscribe(room)
+        {:ok, _} = Presence.track_user(room, socket.id, me)
+      end
 
       {:ok,
        socket
        |> assign(:room, room)
        |> assign(:page_title, "#" <> room)
        |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
+       |> assign(:max_avatars, @max_avatars)
+       |> assign(:me, me)
+       |> assign(:typing_timer, nil)
+       |> assign_presence()
        |> assign_message_form(%{})
        |> stream(:messages, Chat.list_recent_messages(room))}
     else
@@ -168,14 +219,22 @@ defmodule HoloChatWeb.ChatLive do
       |> Chat.change_message(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    typing? = String.trim(params["body"] || "") != ""
+
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset))
+     |> set_activity(presence_name(params["username"]), typing?)}
   end
 
   def handle_event("send", %{"message" => params}, socket) do
     case Chat.create_message(socket.assigns.room, params) do
       {:ok, message} ->
         # The message itself arrives via PubSub; keep the name, clear the body.
-        {:noreply, assign_message_form(socket, %{"username" => message.username})}
+        {:noreply,
+         socket
+         |> assign_message_form(%{"username" => message.username})
+         |> set_activity(message.username, false)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -196,6 +255,65 @@ defmodule HoloChatWeb.ChatLive do
   def handle_info({:new_message, message}, socket) do
     {:noreply, stream_insert(socket, :messages, message)}
   end
+
+  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
+    {:noreply, assign_presence(socket)}
+  end
+
+  def handle_info(:typing_timeout, socket) do
+    {:noreply, set_activity(socket, socket.assigns.me.name, false)}
+  end
+
+  # Updates our presence metadata, but only when it actually changed, so
+  # keystrokes don't each produce a presence broadcast. While typing, every
+  # keystroke pushes back the timeout that clears the typing state.
+  defp set_activity(socket, name, typing?) do
+    me = %{name: name, typing: typing?}
+
+    if me != socket.assigns.me do
+      Presence.update_user(socket.assigns.room, socket.id, me)
+    end
+
+    socket
+    |> assign(:me, me)
+    |> restart_typing_timer(typing?)
+  end
+
+  defp restart_typing_timer(socket, typing?) do
+    if timer = socket.assigns.typing_timer, do: Process.cancel_timer(timer)
+    timer = if typing?, do: Process.send_after(self(), :typing_timeout, @typing_timeout)
+    assign(socket, :typing_timer, timer)
+  end
+
+  defp assign_presence(socket) do
+    users = Presence.list_users(socket.assigns.room)
+    names = Enum.map(users, fn {_key, meta} -> meta.name end)
+
+    typing_names =
+      for {key, %{typing: true} = meta} <- users, key != socket.id, uniq: true do
+        meta.name || "Someone"
+      end
+
+    socket
+    |> assign(:online_names, names |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort())
+    |> assign(:guest_count, Enum.count(names, &is_nil/1))
+    |> assign(:typing_names, Enum.sort(typing_names))
+  end
+
+  defp presence_name(username) do
+    case String.trim(username || "") do
+      "" -> nil
+      name -> String.slice(name, 0, 32)
+    end
+  end
+
+  defp typing_text([name]), do: "#{name} is typing…"
+  defp typing_text([a, b]), do: "#{a} and #{b} are typing…"
+  defp typing_text(_names), do: "Several people are typing…"
+
+  defp online_summary(names, 0), do: Enum.join(names, ", ")
+  defp online_summary(names, 1), do: Enum.join(names ++ ["1 guest"], ", ")
+  defp online_summary(names, guests), do: Enum.join(names ++ ["#{guests} guests"], ", ")
 
   defp assign_message_form(socket, params) do
     changeset = Chat.change_message(%Message{room: socket.assigns.room}, params)

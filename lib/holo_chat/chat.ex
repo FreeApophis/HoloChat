@@ -4,10 +4,12 @@ defmodule HoloChat.Chat do
   everyone subscribed to a room.
   """
 
+  use Boundary, deps: [HoloChat.Repo], exports: [Message]
+
   import Ecto.Query, warn: false
 
-  alias HoloChat.Repo
   alias HoloChat.Chat.Message
+  alias HoloChat.Repo
 
   @pubsub HoloChat.PubSub
   @room_format ~r/\A[a-z0-9][a-z0-9-]{0,31}\z/

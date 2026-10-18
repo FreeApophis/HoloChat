@@ -3,6 +3,8 @@ defmodule HoloChat.Application do
   # for more information on OTP Applications
   @moduledoc false
 
+  use Boundary, top_level?: true, deps: [HoloChat, HoloChatWeb]
+
   use Application
 
   @impl true
@@ -12,6 +14,7 @@ defmodule HoloChat.Application do
       HoloChat.Repo,
       {DNSCluster, query: Application.get_env(:holo_chat, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: HoloChat.PubSub},
+      HoloChatWeb.Presence,
       # Start a worker by calling: HoloChat.Worker.start_link(arg)
       # {HoloChat.Worker, arg},
       # Start to serve requests, typically the last entry

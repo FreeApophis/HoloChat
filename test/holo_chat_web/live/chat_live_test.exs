@@ -54,14 +54,16 @@ defmodule HoloChatWeb.ChatLiveTest do
   end
 
   test "an invalid message shows errors and is not sent", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    # PubSub is shared across async tests, so use a room nobody else posts to.
+    room = "invalid-#{System.unique_integer([:positive])}"
+    {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
 
     view
     |> form("#message-form", message: %{username: "", body: "hi"})
     |> render_submit()
 
     refute has_element?(view, "#messages > div[id^='messages-']:not(#messages-empty)")
-    assert Chat.list_recent_messages("lobby") == []
+    assert Chat.list_recent_messages(room) == []
   end
 
   test "switching rooms normalizes the name", %{conn: conn} do

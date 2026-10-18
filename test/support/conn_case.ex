@@ -15,6 +15,8 @@ defmodule HoloChatWeb.ConnCase do
   this option is not recommended for other databases.
   """
 
+  # Test support may reach into any boundary.
+  use Boundary, top_level?: true, check: [in: false, out: false]
   use ExUnit.CaseTemplate
 
   using do

@@ -17,6 +17,8 @@ defmodule HoloChatWeb do
   those modules here.
   """
 
+  use Boundary, deps: [HoloChat], exports: [Endpoint, Telemetry, Presence]
+
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
   def router do
@@ -88,8 +90,8 @@ defmodule HoloChatWeb do
       import HoloChatWeb.CoreComponents
 
       # Common modules used in templates
-      alias Phoenix.LiveView.JS
       alias HoloChatWeb.Layouts
+      alias Phoenix.LiveView.JS
 
       # Routes generation with the ~p sigil
       unquote(verified_routes())
