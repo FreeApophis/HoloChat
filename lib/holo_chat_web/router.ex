@@ -53,6 +53,11 @@ defmodule HoloChatWeb.Router do
       on_mount: [{HoloChatWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/profile", UserLive.Profile, :edit
+
+      # Creating and managing role-play rooms needs an account; game master
+      # rights are checked in the LiveView, since they are per room.
+      live "/roleplay/new", RoleplayLive.New, :new
+      live "/rooms/:room/settings", RoleplayLive.Settings, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password
@@ -78,6 +83,7 @@ defmodule HoloChatWeb.Router do
       # Guests can read the chat; posting requires a user.
       live "/", ChatLive
       live "/rooms/:room", ChatLive
+      live "/roleplay", RoleplayLive.Index, :index
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new

@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.ChatLive do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.{Accounts, Assistant, Chat}
+  alias HoloChat.{Accounts, Assistant, Chat, Rooms}
   alias HoloChat.Chat.Message
   alias HoloChatWeb.Presence
 
@@ -21,14 +21,24 @@ defmodule HoloChatWeb.ChatLive do
           class="hidden w-56 shrink-0 flex-col overflow-y-auto rounded-2xl border border-base-300 bg-base-100 p-2 shadow-sm md:flex"
           aria-label="Rooms"
         >
+          <.link
+            id="roleplay-link"
+            navigate={~p"/roleplay"}
+            class="mb-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 px-2 py-1.5 text-sm font-medium text-violet-600 transition hover:from-violet-500/20 hover:to-fuchsia-500/20"
+          >
+            <.icon name="hero-sparkles" class="size-4 shrink-0" /> Role-play scenes
+          </.link>
+
           <h2 class="px-2 pt-1 pb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
             Rooms
           </h2>
+
           <.link
             :for={room <- room_list(@active_rooms, @room_counts, @room, @unread)}
             id={"room-link-#{room.name}"}
             patch={room_path(room.name)}
             aria-current={room.current? && "page"}
+            data-kind={if(MapSet.member?(@roleplay_rooms, room.name), do: "roleplay", else: "chat")}
             class={[
               "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
               if(room.current?,
@@ -37,10 +47,19 @@ defmodule HoloChatWeb.ChatLive do
               )
             ]}
           >
-            <.icon name="hero-hashtag" class="size-3.5 shrink-0 opacity-50" />
+            <.icon
+              name={
+                if(MapSet.member?(@roleplay_rooms, room.name),
+                  do: "hero-sparkles",
+                  else: "hero-hashtag"
+                )
+              }
+              class="size-3.5 shrink-0 opacity-50"
+            />
             <span class={["min-w-0 flex-1 truncate", room.unread? && "font-semibold"]}>
               {room.name}
             </span>
+
             <span
               :if={room.unread?}
               id={"room-unread-#{room.name}"}
@@ -58,13 +77,71 @@ defmodule HoloChatWeb.ChatLive do
           </.link>
         </aside>
 
-        <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+        <div class="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+          <%!-- Behind all content: -z-10 inside the isolated stacking context --%>
+          <div
+            :if={@scene && @scene.background_image_id}
+            id="scene-background"
+            class="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center"
+            style={"background-image: url('#{~p"/avatars/#{@scene.background_image_id}"}')"}
+          >
+            <div class="absolute inset-0 bg-gradient-to-b from-base-100/70 via-base-100/80 to-base-100/90">
+            </div>
+          </div>
+
+          <div
+            :if={@scene}
+            id="scene-header"
+            class="border-b border-base-300/70 bg-base-100/40 px-4 py-3 backdrop-blur-sm"
+          >
+            <div class="flex items-start gap-3">
+              <div class="min-w-0 flex-1">
+                <h2 id="scene-title" class="flex items-center gap-2 text-lg font-semibold">
+                  <.icon name="hero-sparkles" class="size-5 text-violet-500" />
+                  <span class="truncate">{@scene.title}</span>
+                </h2>
+
+                <p :if={@scene.topic} id="scene-topic" class="text-sm opacity-75">
+                  {@scene.topic}
+                </p>
+              </div>
+
+              <button
+                :if={@scene.scenario}
+                id="show-scenario"
+                type="button"
+                phx-click="toggle_scenario"
+                aria-expanded={to_string(@show_scenario?)}
+                class="flex items-center gap-1 rounded-lg px-2 py-1 text-sm transition hover:bg-base-200/70"
+              >
+                <.icon name="hero-book-open" class="size-4" /> Scenario
+              </button>
+
+              <.link
+                :if={@can_manage_scene?}
+                id="scene-settings-link"
+                navigate={~p"/rooms/#{@room}/settings"}
+                class="rounded-lg p-1.5 transition hover:bg-base-200/70"
+                aria-label="Scene settings"
+                title="Scene settings"
+              >
+                <.icon name="hero-cog-6-tooth" class="size-5" />
+              </.link>
+            </div>
+            <p
+              :if={@show_scenario? && @scene.scenario}
+              id="scenario"
+              class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
+              phx-no-format
+            >{@scene.scenario}</p>
+          </div>
+
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
             <div class="flex items-center gap-3">
               <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
-                <.icon name="hero-hashtag" class="size-4 opacity-60" />
-                {@room}
+                <.icon name="hero-hashtag" class="size-4 opacity-60" /> {@room}
               </h1>
+
               <div
                 id="online-users"
                 class="flex items-center gap-2"
@@ -90,12 +167,15 @@ defmodule HoloChatWeb.ChatLive do
                     />
                   </button>
                 </div>
+
                 <span id="online-count" class="flex items-center gap-1.5 text-xs opacity-70">
-                  <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span>
-                  {length(@online_names) + @guest_count} online
+                  <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span> {length(
+                    @online_names
+                  ) + @guest_count} online
                 </span>
               </div>
             </div>
+
             <.form
               for={@room_form}
               id="room-form"
@@ -136,10 +216,12 @@ defmodule HoloChatWeb.ChatLive do
               >
                 Load older messages
               </button>
+
               <p :if={!@more_messages? && @has_messages?} id="history-start" class="opacity-50">
                 This is the beginning of #{@room}.
               </p>
             </div>
+
             <div
               :if={!@has_messages?}
               id="messages-empty"
@@ -148,6 +230,7 @@ defmodule HoloChatWeb.ChatLive do
               <.icon name="hero-sparkles" class="size-8" />
               <p class="text-sm">No messages in #{@room} yet. Say hi!</p>
             </div>
+
             <div
               id="messages"
               phx-update="stream"
@@ -174,6 +257,7 @@ defmodule HoloChatWeb.ChatLive do
                     assistant={message.from_assistant}
                   />
                 </button>
+
                 <div class="min-w-0">
                   <div class="flex items-baseline gap-2">
                     <button
@@ -186,6 +270,7 @@ defmodule HoloChatWeb.ChatLive do
                     >
                       {message.username}
                     </button>
+
                     <span
                       :if={message.from_assistant}
                       data-role="assistant-badge"
@@ -193,6 +278,7 @@ defmodule HoloChatWeb.ChatLive do
                     >
                       AI
                     </span>
+
                     <time
                       id={"message-time-#{message.id}"}
                       datetime={DateTime.to_iso8601(message.inserted_at)}
@@ -204,8 +290,8 @@ defmodule HoloChatWeb.ChatLive do
                       {Calendar.strftime(message.inserted_at, "%H:%M")}
                     </time>
                   </div>
-                  <%!-- pre-wrap shows any whitespace, so the formatter must not indent the body --%>
-                  <p
+
+                  <%!-- pre-wrap shows any whitespace, so the formatter must not indent the body --%> <p
                     class="whitespace-pre-wrap break-words text-sm leading-relaxed"
                     phx-no-format
                   >{message.body}</p>
@@ -213,6 +299,7 @@ defmodule HoloChatWeb.ChatLive do
               </div>
             </div>
           </div>
+
           <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollToBottom">
             // Keeps the message list pinned to the newest message while the reader is
             // at the bottom, and keeps the visible messages still when older ones are
@@ -247,6 +334,7 @@ defmodule HoloChatWeb.ChatLive do
               scroll() { this.el.scrollTop = this.el.scrollHeight; this.remember() }
             }
           </script>
+
           <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
             // Rewrites a server-rendered UTC <time> in the viewer's own time zone:
             // just the time for today, otherwise date and time.
@@ -298,6 +386,7 @@ defmodule HoloChatWeb.ChatLive do
                 autocomplete="off"
               />
             </div>
+
             <.button variant="primary" id="send-button" phx-disable-with="Sending…">
               <.icon name="hero-paper-airplane" class="size-4" /> Send
             </.button>
@@ -342,6 +431,7 @@ defmodule HoloChatWeb.ChatLive do
           >
             <.icon name="hero-x-mark" class="size-5" />
           </button>
+
           <.avatar
             name={@profile.name}
             avatar_id={@profile.avatar_id}
@@ -376,6 +466,8 @@ defmodule HoloChatWeb.ChatLive do
     {:ok,
      socket
      |> assign(:room, nil)
+     |> assign(:roleplay_rooms, Rooms.roleplay_room_names())
+     |> assign(scene: nil, can_manage_scene?: false, show_scenario?: false)
      |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
      |> assign(:max_avatars, @max_avatars)
      |> assign(:me, presence_meta(socket.assigns.current_scope))
@@ -415,6 +507,7 @@ defmodule HoloChatWeb.ChatLive do
 
     if connected?(socket) do
       Chat.unsubscribe(room)
+      Rooms.unsubscribe(room)
       Presence.unsubscribe(room)
       Presence.untrack_user(room, socket.id)
     end
@@ -427,6 +520,7 @@ defmodule HoloChatWeb.ChatLive do
 
     if connected?(socket) do
       Chat.subscribe(room)
+      Rooms.subscribe(room)
       Presence.subscribe(room)
       {:ok, _} = Presence.track_user(room, socket.id, me)
       {:ok, _} = Presence.put_room(socket.id, room)
@@ -435,6 +529,8 @@ defmodule HoloChatWeb.ChatLive do
     socket
     |> assign(:room, room)
     |> assign(:page_title, "#" <> room)
+    |> assign_scene(Rooms.get_room(room))
+    |> assign(:show_scenario?, false)
     |> assign(:me, me)
     |> update(:unread, &MapSet.delete(&1, room))
     |> assign(:room_counts, Presence.room_counts())
@@ -510,6 +606,9 @@ defmodule HoloChatWeb.ChatLive do
 
   def handle_event("show_profile", _params, socket), do: {:noreply, socket}
 
+  def handle_event("toggle_scenario", _params, socket),
+    do: {:noreply, update(socket, :show_scenario?, &(not &1))}
+
   def handle_event("close_profile", _params, socket),
     do: {:noreply, assign(socket, :profile, nil)}
 
@@ -530,6 +629,12 @@ defmodule HoloChatWeb.ChatLive do
 
   # Still in flight from a room we just left.
   def handle_info({:new_message, _message}, socket), do: {:noreply, socket}
+
+  def handle_info({:room_updated, %{name: room} = scene}, %{assigns: %{room: room}} = socket) do
+    {:noreply, assign_scene(socket, scene)}
+  end
+
+  def handle_info({:room_updated, _scene}, socket), do: {:noreply, socket}
 
   def handle_info({:room_activity, room, at}, socket) do
     active_rooms =
@@ -660,6 +765,16 @@ defmodule HoloChatWeb.ChatLive do
           assistant: true
         }
     end
+  end
+
+  # The scene of a role-play room; nil for plain chat rooms.
+  defp assign_scene(socket, scene) do
+    socket
+    |> assign(:scene, scene)
+    |> assign(
+      :can_manage_scene?,
+      scene != nil and Rooms.can_manage?(socket.assigns.current_scope, scene)
+    )
   end
 
   defp assign_personas(socket) do

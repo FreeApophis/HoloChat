@@ -44,6 +44,15 @@ defmodule HoloChatWeb.Layouts do
           <span class="text-lg font-semibold tracking-tight">HoloChat</span>
         </.link>
         <nav class="flex items-center gap-2 text-sm sm:gap-3">
+          <.link
+            id="roleplay-nav-link"
+            navigate={~p"/roleplay"}
+            class="rounded-lg p-1.5 text-violet-600 transition hover:bg-base-200"
+            aria-label="Role-play scenes"
+            title="Role-play scenes"
+          >
+            <.icon name="hero-sparkles" class="size-5" />
+          </.link>
           <%= if @current_scope do %>
             <.link
               id="current-username"

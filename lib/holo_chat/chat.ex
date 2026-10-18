@@ -25,6 +25,13 @@ defmodule HoloChat.Chat do
   def valid_room?(_), do: false
 
   @doc """
+  Returns true if `room` is in use as a chat room: it has messages, or it is
+  the lobby.
+  """
+  def room_used?("lobby"), do: true
+  def room_used?(room), do: Repo.exists?(from m in Message, where: m.room == ^room)
+
+  @doc """
   Subscribes the calling process to new messages in `room`.
 
   Subscribers receive `{:new_message, %Message{}}`.

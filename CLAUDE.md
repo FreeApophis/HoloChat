@@ -42,11 +42,14 @@ HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
 HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit,
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
-                       Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar
+                       Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar,
+                       Rooms, Rooms.Room
 ├── HoloChat.Repo      sub-boundary; private to the core
-├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (images stored in the DB)
+├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (all images, stored in the DB)
 ├── HoloChat.Accounts  sub-boundary; deps: Repo, Avatars; exports User, Scope
 ├── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
+├── HoloChat.Rooms     sub-boundary; deps: Repo, Accounts, Avatars, Chat; exports Room
+│                      (role-play rooms with game masters and a scene; chat rooms need no record)
 └── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Chat; exports Settings, Persona,
                        LLM, Server
 ```

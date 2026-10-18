@@ -216,4 +216,14 @@ defmodule HoloChat.ChatTest do
       refute Chat.valid_room?(String.duplicate("a", 33))
     end
   end
+
+  describe "room_used?/1" do
+    test "is true once a room has messages, and always for the lobby",
+         %{scope: scope, room: room} do
+      refute Chat.room_used?(room)
+      message_fixture(scope, room)
+      assert Chat.room_used?(room)
+      assert Chat.room_used?("lobby")
+    end
+  end
 end

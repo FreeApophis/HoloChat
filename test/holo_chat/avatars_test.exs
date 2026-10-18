@@ -48,6 +48,20 @@ defmodule HoloChat.AvatarsTest do
       assert r > 240 and g > 240 and b > 240
     end
 
+    test "can produce other sizes, cropping to their aspect ratio" do
+      # Top half red, bottom half blue: a 16:9 crop of a square keeps the middle.
+      halves = fn {_x, y} -> if y < 50, do: {255, 0, 0}, else: {0, 0, 255} end
+
+      {:ok, jpeg} = Avatars.process(image_binary(100, 100, halves), {160, 90})
+      {:ok, image} = StbImage.read_binary(jpeg)
+
+      assert image.shape == {90, 160, 3}
+      assert {r, _g, b} = pixel(image, 80, 10)
+      assert r > 200 and b < 60
+      assert {r, _g, b} = pixel(image, 80, 80)
+      assert b > 200 and r < 60
+    end
+
     test "rejects data that isn't an image" do
       assert {:error, :invalid_image} = Avatars.process("definitely not an image")
     end

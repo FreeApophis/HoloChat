@@ -20,6 +20,8 @@ defmodule HoloChat do
       Assistant.Persona,
       Assistant.Server,
       Chat,
-      Chat.Message
+      Chat.Message,
+      Rooms,
+      Rooms.Room
     ]
 end
