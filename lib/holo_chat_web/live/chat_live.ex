@@ -101,8 +101,11 @@ defmodule HoloChatWeb.ChatLive do
               <div class="flex items-baseline gap-2">
                 <span class="text-sm font-semibold">{message.username}</span>
                 <time
+                  id={"message-time-#{message.id}"}
                   datetime={DateTime.to_iso8601(message.inserted_at)}
                   title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+                  phx-hook=".LocalTime"
+                  phx-update="ignore"
                   class="text-xs opacity-50"
                 >
                   {Calendar.strftime(message.inserted_at, "%H:%M")}
@@ -130,6 +133,25 @@ defmodule HoloChatWeb.ChatLive do
               this.nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
             },
             scroll() { this.el.scrollTop = this.el.scrollHeight; this.nearBottom = true }
+          }
+        </script>
+        <script :type={Phoenix.LiveView.ColocatedHook} name=".LocalTime">
+          // Rewrites a server-rendered UTC <time> in the viewer's own time zone:
+          // just the time for today, otherwise date and time.
+          export default {
+            mounted() {
+              const date = new Date(this.el.getAttribute("datetime"))
+              const now = new Date()
+              const sameDay = date.toDateString() === now.toDateString()
+              const sameYear = date.getFullYear() === now.getFullYear()
+              const time = {hour: "2-digit", minute: "2-digit"}
+              const options = sameDay ? time
+                : sameYear ? {...time, month: "short", day: "numeric"}
+                : {...time, year: "numeric", month: "short", day: "numeric"}
+
+              this.el.textContent = date.toLocaleString(undefined, options)
+              this.el.title = date.toLocaleString(undefined, {dateStyle: "full", timeStyle: "long"})
+            }
           }
         </script>
 

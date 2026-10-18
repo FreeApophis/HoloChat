@@ -105,6 +105,21 @@ defmodule HoloChatWeb.ChatLiveTest do
     end
   end
 
+  test "timestamps carry the exact instant for local formatting in the browser", %{conn: conn} do
+    room = unique_room()
+    message = message_fixture(user_scope_fixture(), room)
+
+    {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
+
+    # The browser hook reads `datetime` and owns the element's text from then on.
+    assert has_element?(
+             view,
+             "#messages-#{message.id} time#message-time-#{message.id}" <>
+               "[datetime='#{DateTime.to_iso8601(message.inserted_at)}']" <>
+               "[phx-hook][phx-update='ignore']"
+           )
+  end
+
   test "messages stay in their room", %{conn: conn} do
     room = unique_room()
     {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
