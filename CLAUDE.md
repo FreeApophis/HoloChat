@@ -39,11 +39,14 @@ compile time. A violation is a compile warning, so it fails `mix precommit`.
 
 ```text
 HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
-HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit
-HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message
+HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit,
+                       AssistantPresence
+HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
+                       Assistant, Assistant.{Settings, Server}
 ├── HoloChat.Repo      sub-boundary; private to the core
 ├── HoloChat.Accounts  sub-boundary; deps: Repo; exports User, Scope
-└── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
+├── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
+└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Chat; exports Settings, LLM, Server
 ```
 
 Rules:
@@ -54,6 +57,10 @@ Rules:
 - **One context per domain area.** A new context is a new sub-boundary:
   `use Boundary, deps: [HoloChat.Repo, ...], exports: [...]`. Then add it to the `exports` of
   `HoloChat`. Calls between contexts go through public functions and are declared in `deps`.
+- **Long-running domain processes live in the core and announce state via PubSub** (e.g.
+  `Assistant.Server` broadcasts `{:assistant_status, ...}`); web-layer processes such as
+  `HoloChatWeb.AssistantPresence` turn those events into presence. The core never calls
+  `HoloChatWeb.*`.
 - **Domain side effects live in the context, next to the write.** For example, `Chat.create_message/2`
   persists and then broadcasts. LiveViews subscribe and react; they never broadcast domain events
   themselves. Presence and typing state are web-only concerns and live in `HoloChatWeb.Presence`.
@@ -97,6 +104,9 @@ Also:
 
 - Test files mirror `lib/` paths. Use `HoloChat.DataCase` for core tests and `HoloChatWeb.ConnCase`
   for web tests. Default to `async: true`.
+- Exception: tests that run `HoloChat.Assistant.Server` use `async: false` with `set_mox_global`.
+  The server reads the database and calls the LLM mock from processes started before the test
+  could allow them, so they need the shared sandbox; ExUnit runs such modules on their own.
 - **PubSub, Presence and rate limits are global across async tests.** Any test asserting absence,
   counts or presence must use its own room (`ChatFixtures.unique_room/0`). Every `ConnCase` conn has
   its own client IP; build extra clients with `build_conn_with_unique_ip/0`, not `build_conn/0`.
@@ -126,7 +136,7 @@ Also:
   **Never mock our own modules.**
 - External services (third-party HTTP APIs, email or SMS providers, ...) sit behind a behaviour
   owned by the context that uses them. Each gets a real adapter and a `Mox` mock in tests, selected
-  via application config. Add `{:mox, "~> 1.2", only: :test}` with the first such integration.
+  via application config. Mox (`HoloChat.Assistant.LLMMock`) is defined in `test/test_helper.exs`.
   Adapters built on `Req` test their HTTP layer with `Req.Test` stubs.
 - Time and randomness are parameters, not mocks: e.g. `now \\ DateTime.utc_now()`.
 
