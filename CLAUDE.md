@@ -42,12 +42,13 @@ HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
 HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit,
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
-                       Assistant, Assistant.{Settings, Persona, Server}
+                       Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar
 ├── HoloChat.Repo      sub-boundary; private to the core
-├── HoloChat.Accounts  sub-boundary; deps: Repo; exports User, Scope
+├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (images stored in the DB)
+├── HoloChat.Accounts  sub-boundary; deps: Repo, Avatars; exports User, Scope
 ├── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
-└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Chat; exports Settings, Persona, LLM,
-                       Server
+└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Chat; exports Settings, Persona,
+                       LLM, Server
 ```
 
 Rules:
@@ -69,6 +70,10 @@ Rules:
   Use bang functions only where a missing record is a bug.
 - Server-controlled fields (`room`, `user_id`, `username` on messages, ...) are set on the struct,
   never `cast`.
+- **Profiles are looked up, never copied.** Messages reference their author (`user_id`,
+  `persona_id`); avatars and descriptions are read from the profile when shown, so changes apply
+  everywhere (and swappable role-play characters can later be another kind of author).
+  `Message.persona_id` is a plain id because Chat must not depend on Assistant.
 - **Authorization goes through the scope.** Context functions that act for a user take
   `%Accounts.Scope{}` as their first argument and derive the user from it (see
   `Chat.create_message/3`); they return `{:error, :unauthorized}` for guests. LiveViews pass
