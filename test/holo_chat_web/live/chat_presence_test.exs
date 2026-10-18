@@ -2,6 +2,8 @@ defmodule HoloChatWeb.ChatPresenceTest do
   use HoloChatWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
+  import HoloChat.AccountsFixtures
+  import HoloChat.ChatFixtures
 
   alias HoloChatWeb.Presence
   alias Phoenix.Socket.Broadcast
@@ -9,7 +11,7 @@ defmodule HoloChatWeb.ChatPresenceTest do
 
   setup do
     # PubSub and Presence are global, so each test gets its own room.
-    room = "presence-#{System.unique_integer([:positive])}"
+    room = unique_room()
     Presence.subscribe(room)
 
     on_exit(fn ->
@@ -22,89 +24,95 @@ defmodule HoloChatWeb.ChatPresenceTest do
     %{room: room}
   end
 
-  test "lists everyone in the room", %{conn: conn, room: room} do
-    {:ok, ada, _html} = live(conn, ~p"/rooms/#{room}")
-    {:ok, other, _html} = live(build_conn(), ~p"/rooms/#{room}")
+  test "lists members by name and counts guests", %{room: room} do
+    {ada, _view} = join_as_user(room)
+    guest = join_as_guest(room)
 
-    type(ada, "ada", "")
-    await_presence(%{name: "ada", typing: false})
-
-    assert has_element?(other, "#online-count", "2 online")
-    assert has_element?(other, "#online-users[title='ada, 1 guest']")
+    assert has_element?(guest, "#online-count", "2 online")
+    assert has_element?(guest, "#online-users[title='#{ada.username}, 1 guest']")
   end
 
-  test "shows others typing, but not yourself", %{conn: conn, room: room} do
-    {:ok, ada, _html} = live(conn, ~p"/rooms/#{room}")
-    {:ok, other, _html} = live(build_conn(), ~p"/rooms/#{room}")
+  test "shows others typing, but not yourself", %{room: room} do
+    {ada, ada_view} = join_as_user(room)
+    {_bob, bob_view} = join_as_user(room)
 
-    type(ada, "ada", "hel")
-    await_presence(%{name: "ada", typing: true})
+    type(ada_view, "hel")
+    await_presence(%{name: ada.username, typing: true})
 
-    assert has_element?(other, "#typing-indicator", "ada is typing")
-    refute has_element?(ada, "#typing-indicator", "is typing")
+    assert has_element?(bob_view, "#typing-indicator", "#{ada.username} is typing")
+    refute has_element?(ada_view, "#typing-indicator", "is typing")
   end
 
-  test "typing stops when the message is sent", %{conn: conn, room: room} do
-    {:ok, ada, _html} = live(conn, ~p"/rooms/#{room}")
-    {:ok, other, _html} = live(build_conn(), ~p"/rooms/#{room}")
+  test "typing stops when the message is sent", %{room: room} do
+    {ada, ada_view} = join_as_user(room)
+    guest = join_as_guest(room)
 
-    type(ada, "ada", "hello")
-    await_presence(%{name: "ada", typing: true})
+    type(ada_view, "hello")
+    await_presence(%{name: ada.username, typing: true})
 
-    ada
-    |> form("#message-form", message: %{username: "ada", body: "hello"})
+    ada_view
+    |> form("#message-form", message: %{body: "hello"})
     |> render_submit()
 
-    await_presence(%{name: "ada", typing: false})
-    refute has_element?(other, "#typing-indicator", "is typing")
+    await_presence(%{name: ada.username, typing: false})
+    refute has_element?(guest, "#typing-indicator", "is typing")
   end
 
-  test "typing stops when the body is cleared", %{conn: conn, room: room} do
-    {:ok, ada, _html} = live(conn, ~p"/rooms/#{room}")
-    {:ok, other, _html} = live(build_conn(), ~p"/rooms/#{room}")
+  test "typing stops when the body is cleared", %{room: room} do
+    {ada, ada_view} = join_as_user(room)
+    guest = join_as_guest(room)
 
-    type(ada, "ada", "hello")
-    await_presence(%{name: "ada", typing: true})
-    type(ada, "ada", "")
-    await_presence(%{name: "ada", typing: false})
+    type(ada_view, "hello")
+    await_presence(%{name: ada.username, typing: true})
+    type(ada_view, "")
+    await_presence(%{name: ada.username, typing: false})
 
-    refute has_element?(other, "#typing-indicator", "is typing")
+    refute has_element?(guest, "#typing-indicator", "is typing")
   end
 
-  test "typing stops after the idle timeout", %{conn: conn, room: room} do
-    {:ok, ada, _html} = live(conn, ~p"/rooms/#{room}")
-    {:ok, other, _html} = live(build_conn(), ~p"/rooms/#{room}")
+  test "typing stops after the idle timeout", %{room: room} do
+    {ada, ada_view} = join_as_user(room)
+    guest = join_as_guest(room)
 
-    type(ada, "ada", "hello")
-    await_presence(%{name: "ada", typing: true})
+    type(ada_view, "hello")
+    await_presence(%{name: ada.username, typing: true})
 
     # Simulate the timer firing instead of waiting for it.
-    send(ada.pid, :typing_timeout)
-    await_presence(%{name: "ada", typing: false})
+    send(ada_view.pid, :typing_timeout)
+    await_presence(%{name: ada.username, typing: false})
 
-    refute has_element?(other, "#typing-indicator", "is typing")
+    refute has_element?(guest, "#typing-indicator", "is typing")
   end
 
   test "several typists are summarized", %{room: room} do
-    views =
-      for name <- ~w(ada bob cy) do
-        {:ok, view, _html} = live(build_conn(), ~p"/rooms/#{room}")
-        {name, view}
-      end
+    typists = for _ <- 1..3, do: join_as_user(room)
+    watcher = join_as_guest(room)
 
-    {:ok, watcher, _html} = live(build_conn(), ~p"/rooms/#{room}")
-
-    for {name, view} <- views do
-      type(view, name, "hi")
-      await_presence(%{name: name, typing: true})
+    for {user, view} <- typists do
+      type(view, "hi")
+      await_presence(%{name: user.username, typing: true})
     end
 
     assert has_element?(watcher, "#typing-indicator", "Several people are typing")
   end
 
-  defp type(view, username, body) do
+  defp join_as_user(room) do
+    user = user_fixture()
+
+    {:ok, view, _html} =
+      build_conn_with_unique_ip() |> log_in_user(user) |> live(~p"/rooms/#{room}")
+
+    {user, view}
+  end
+
+  defp join_as_guest(room) do
+    {:ok, view, _html} = live(build_conn_with_unique_ip(), ~p"/rooms/#{room}")
     view
-    |> form("#message-form", message: %{username: username, body: body})
+  end
+
+  defp type(view, body) do
+    view
+    |> form("#message-form", message: %{body: body})
     |> render_change()
   end
 

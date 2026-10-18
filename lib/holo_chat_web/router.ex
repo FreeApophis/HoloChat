@@ -1,6 +1,8 @@
 defmodule HoloChatWeb.Router do
   use HoloChatWeb, :router
 
+  import HoloChatWeb.UserAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,17 +10,11 @@ defmodule HoloChatWeb.Router do
     plug :put_root_layout, html: {HoloChatWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_scope_for_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
-  end
-
-  scope "/", HoloChatWeb do
-    pipe_through :browser
-
-    live "/", ChatLive
-    live "/rooms/:room", ChatLive
   end
 
   # Other scopes may use custom stacks.
@@ -41,5 +37,36 @@ defmodule HoloChatWeb.Router do
       live_dashboard "/dashboard", metrics: HoloChatWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
+  end
+
+  ## Authentication routes
+
+  scope "/", HoloChatWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :require_authenticated_user,
+      on_mount: [{HoloChatWeb.UserAuth, :require_authenticated}] do
+      live "/users/settings", UserLive.Settings, :edit
+    end
+
+    post "/users/update-password", UserSessionController, :update_password
+  end
+
+  scope "/", HoloChatWeb do
+    pipe_through [:browser]
+
+    live_session :current_user,
+      on_mount: [{HoloChatWeb.UserAuth, :mount_current_scope}] do
+      # Guests can read the chat; posting requires a user.
+      live "/", ChatLive
+      live "/rooms/:room", ChatLive
+
+      live "/users/register", UserLive.Registration, :new
+      live "/users/log-in", UserLive.Login, :new
+      live "/users/recover", UserLive.Recovery, :new
+    end
+
+    post "/users/log-in", UserSessionController, :create
+    delete "/users/log-out", UserSessionController, :delete
   end
 end

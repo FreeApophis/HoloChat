@@ -18,7 +18,7 @@ defmodule HoloChatWeb.ChatLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
           <div class="flex items-center gap-3">
@@ -149,20 +149,13 @@ defmodule HoloChatWeb.ChatLive do
         </div>
 
         <.form
+          :if={@current_scope}
           for={@form}
           id="message-form"
           phx-change="validate"
           phx-submit="send"
-          class="flex flex-col gap-2 border-t border-base-300 px-3 pt-3 sm:flex-row sm:items-start"
+          class="flex gap-2 border-t border-base-300 px-3 pt-3"
         >
-          <div class="sm:w-40">
-            <.input
-              field={@form[:username]}
-              type="text"
-              placeholder="Your name"
-              autocomplete="nickname"
-            />
-          </div>
           <div class="flex-1">
             <.input
               field={@form[:body]}
@@ -175,6 +168,21 @@ defmodule HoloChatWeb.ChatLive do
             <.icon name="hero-paper-airplane" class="size-4" /> Send
           </.button>
         </.form>
+
+        <div
+          :if={!@current_scope}
+          id="guest-notice"
+          class="flex flex-wrap items-center justify-center gap-x-1 border-t border-base-300 px-4 pt-3 pb-1 text-sm opacity-80"
+        >
+          <.link navigate={~p"/users/log-in"} class="font-semibold text-primary hover:underline">
+            Log in
+          </.link>
+          or
+          <.link navigate={~p"/users/register"} class="font-semibold text-primary hover:underline">
+            create an account
+          </.link>
+          to join the conversation.
+        </div>
       </div>
     </Layouts.app>
     """
@@ -185,7 +193,7 @@ defmodule HoloChatWeb.ChatLive do
     room = Map.get(params, "room", @default_room)
 
     if Chat.valid_room?(room) do
-      me = %{name: nil, typing: false}
+      me = %{name: username(socket.assigns.current_scope), typing: false}
 
       if connected?(socket) do
         Chat.subscribe(room)
@@ -224,17 +232,19 @@ defmodule HoloChatWeb.ChatLive do
     {:noreply,
      socket
      |> assign(:form, to_form(changeset))
-     |> set_activity(presence_name(params["username"]), typing?)}
+     |> set_typing(typing?)}
   end
 
   def handle_event("send", %{"message" => params}, socket) do
-    case Chat.create_message(socket.assigns.room, params) do
-      {:ok, message} ->
-        # The message itself arrives via PubSub; keep the name, clear the body.
-        {:noreply,
-         socket
-         |> assign_message_form(%{"username" => message.username})
-         |> set_activity(message.username, false)}
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Chat.create_message(scope, room, params) do
+      {:ok, _message} ->
+        # The message itself arrives via PubSub; just clear the composer.
+        {:noreply, socket |> assign_message_form(%{}) |> set_typing(false)}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "Log in to post messages.")}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -261,14 +271,17 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   def handle_info(:typing_timeout, socket) do
-    {:noreply, set_activity(socket, socket.assigns.me.name, false)}
+    {:noreply, set_typing(socket, false)}
   end
 
   # Updates our presence metadata, but only when it actually changed, so
   # keystrokes don't each produce a presence broadcast. While typing, every
   # keystroke pushes back the timeout that clears the typing state.
-  defp set_activity(socket, name, typing?) do
-    me = %{name: name, typing: typing?}
+  # Guests have no composer; ignore crafted events from them.
+  defp set_typing(%{assigns: %{current_scope: nil}} = socket, _typing?), do: socket
+
+  defp set_typing(socket, typing?) do
+    me = %{socket.assigns.me | typing: typing?}
 
     if me != socket.assigns.me do
       Presence.update_user(socket.assigns.room, socket.id, me)
@@ -300,12 +313,8 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:typing_names, Enum.sort(typing_names))
   end
 
-  defp presence_name(username) do
-    case String.trim(username || "") do
-      "" -> nil
-      name -> String.slice(name, 0, 32)
-    end
-  end
+  defp username(%{user: %{username: username}}), do: username
+  defp username(_guest), do: nil
 
   defp typing_text([name]), do: "#{name} is typing…"
   defp typing_text([a, b]), do: "#{a} and #{b} are typing…"

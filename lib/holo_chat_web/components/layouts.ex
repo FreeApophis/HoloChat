@@ -43,7 +43,48 @@ defmodule HoloChatWeb.Layouts do
           </span>
           <span class="text-lg font-semibold tracking-tight">HoloChat</span>
         </.link>
-        <.theme_toggle />
+        <nav class="flex items-center gap-2 text-sm sm:gap-3">
+          <%= if @current_scope do %>
+            <span id="current-username" class="hidden font-medium sm:inline">
+              {@current_scope.user.username}
+            </span>
+            <.link
+              id="settings-link"
+              navigate={~p"/users/settings"}
+              class="rounded-lg p-1.5 transition hover:bg-base-200"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <.icon name="hero-cog-6-tooth" class="size-5" />
+            </.link>
+            <.link
+              id="logout-link"
+              href={~p"/users/log-out"}
+              method="delete"
+              class="rounded-lg p-1.5 transition hover:bg-base-200"
+              aria-label="Log out"
+              title="Log out"
+            >
+              <.icon name="hero-arrow-right-start-on-rectangle" class="size-5" />
+            </.link>
+          <% else %>
+            <.link
+              id="login-link"
+              navigate={~p"/users/log-in"}
+              class="rounded-lg px-3 py-1.5 font-medium transition hover:bg-base-200"
+            >
+              Log in
+            </.link>
+            <.link
+              id="register-link"
+              navigate={~p"/users/register"}
+              class="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-content transition hover:opacity-90"
+            >
+              Sign up
+            </.link>
+          <% end %>
+          <.theme_toggle />
+        </nav>
       </header>
 
       <main class="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-6">

@@ -15,6 +15,7 @@ defmodule HoloChat.Application do
       {DNSCluster, query: Application.get_env(:holo_chat, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: HoloChat.PubSub},
       HoloChatWeb.Presence,
+      {HoloChatWeb.RateLimit, clean_period: :timer.minutes(1)},
       # Start a worker by calling: HoloChat.Worker.start_link(arg)
       # {HoloChat.Worker, arg},
       # Start to serve requests, typically the last entry

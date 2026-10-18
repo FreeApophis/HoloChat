@@ -17,7 +17,7 @@ defmodule HoloChatWeb do
   those modules here.
   """
 
-  use Boundary, deps: [HoloChat], exports: [Endpoint, Telemetry, Presence]
+  use Boundary, deps: [HoloChat], exports: [Endpoint, Telemetry, Presence, RateLimit]
 
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 

@@ -4,10 +4,11 @@ defmodule HoloChat.Chat do
   everyone subscribed to a room.
   """
 
-  use Boundary, deps: [HoloChat.Repo], exports: [Message]
+  use Boundary, deps: [HoloChat.Repo, HoloChat.Accounts], exports: [Message]
 
   import Ecto.Query, warn: false
 
+  alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Chat.Message
   alias HoloChat.Repo
 
@@ -43,10 +44,11 @@ defmodule HoloChat.Chat do
   end
 
   @doc """
-  Creates a message in `room` and broadcasts it to the room's subscribers.
+  Creates a message in `room` as the scope's user and broadcasts it to the
+  room's subscribers. Guests (no user in scope) may not post.
   """
-  def create_message(room, attrs) do
-    %Message{room: room}
+  def create_message(%Scope{user: %User{} = user}, room, attrs) do
+    %Message{room: room, user_id: user.id, username: user.username}
     |> Message.changeset(attrs)
     |> Repo.insert()
     |> case do
@@ -58,6 +60,8 @@ defmodule HoloChat.Chat do
         error
     end
   end
+
+  def create_message(_scope, _room, _attrs), do: {:error, :unauthorized}
 
   @doc """
   Returns a changeset for tracking message form changes.
