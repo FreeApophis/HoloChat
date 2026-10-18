@@ -25,10 +25,10 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
   describe "as an admin" do
     setup %{conn: conn} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
-      %{conn: log_in_user(conn, admin)}
+      %{conn: log_in_user(conn, admin), admin: user_scope_fixture(admin)}
     end
 
-    test "shows the current settings", %{conn: conn} do
+    test "shows the connection settings", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/assistant")
 
       assert has_element?(
@@ -36,15 +36,7 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
                "#assistant-settings-form input[name='settings[endpoint_url]'][value='http://localhost:5001']"
              )
 
-      assert has_element?(
-               view,
-               "#assistant-settings-form input[name='settings[name]'][value='Holo']"
-             )
-
-      assert has_element?(
-               view,
-               "#assistant-settings-form textarea[name='settings[system_prompt]']"
-             )
+      assert has_element?(view, "#assistant-settings-form input[name='settings[enabled]']")
     end
 
     test "saves valid settings", %{conn: conn} do
@@ -53,13 +45,13 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
       html =
         view
         |> form("#assistant-settings-form",
-          settings: %{enabled: "true", name: "Kobold", endpoint_url: "http://gpu-box:5001"}
+          settings: %{enabled: "true", endpoint_url: "http://gpu-box:5001"}
         )
         |> render_submit()
 
       assert html =~ "Settings saved"
 
-      assert %{enabled: true, name: "Kobold", endpoint_url: "http://gpu-box:5001"} =
+      assert %{enabled: true, endpoint_url: "http://gpu-box:5001"} =
                Assistant.get_settings()
     end
 
@@ -114,7 +106,18 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
       refute has_element?(view, "#connection-speed")
     end
 
-    test "warns when the context could outgrow the model's context window", %{conn: conn} do
+    test "warns about personas whose context could outgrow the model's context window",
+         %{conn: conn, admin: admin} do
+      {:ok, _} =
+        Assistant.create_persona(admin, %{"name" => "Chatty", "context_messages" => "40"})
+
+      {:ok, _} =
+        Assistant.create_persona(admin, %{
+          "name" => "Brief",
+          "context_messages" => "2",
+          "max_tokens" => "128"
+        })
+
       expect(LLMMock, :server_info, fn _ ->
         {:ok, %{models: ["tiny"], server: nil, context_length: 2048, generation_speed: nil}}
       end)
@@ -122,7 +125,8 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
       {:ok, view, _html} = live(conn, ~p"/admin/assistant")
       view |> element("#test-connection") |> render_click()
 
-      assert has_element?(view, "#context-warning")
+      assert has_element?(view, "#context-warning", "Chatty")
+      refute has_element?(view, "#context-warning", "Brief")
     end
 
     test "reports a failed connection", %{conn: conn} do

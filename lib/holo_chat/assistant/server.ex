@@ -1,16 +1,17 @@
 defmodule HoloChat.Assistant.Server do
   @moduledoc """
-  The assistant idling in a chat room (the lobby by default).
+  Runs the assistant personas in their rooms.
 
-  It listens to the room and, while enabled, answers messages that mention
-  it as `@Name`. Mentions are queued and answered one at a time, because a
-  local model server generates one reply at a time anyway. Generation runs
-  in a task so the server stays responsive.
+  It listens to every room that has a persona and, while the assistant is
+  enabled, queues each message that mentions a persona there as `@Name`.
+  All personas share one queue and answer one at a time, because a local
+  model server generates one reply at a time anyway. Generation runs in a
+  task so the server stays responsive.
 
-  Status changes are broadcast as `{:assistant_status, status}` on the
-  assistant topic (see `HoloChat.Assistant.subscribe/0`), where `status` is
-  `%{room: room, name: name, online: boolean, typing: boolean}`. Sending
-  `:assistant_status_request` on that topic makes servers re-announce.
+  Status changes are broadcast per room and persona as
+  `{:assistant_status, %{room: room, name: name, online: boolean, typing: boolean}}`
+  on the assistant topic (see `HoloChat.Assistant.subscribe/0`). Sending
+  `:assistant_status_request` on that topic makes the server re-announce.
   """
 
   use GenServer
@@ -20,7 +21,7 @@ defmodule HoloChat.Assistant.Server do
   alias HoloChat.{Assistant, Chat}
   alias HoloChat.Assistant.LLM
 
-  @max_queue 5
+  @max_queue 10
   @apology "Sorry, I can't answer right now. Please try again later."
 
   def start_link(opts) do
@@ -30,67 +31,86 @@ defmodule HoloChat.Assistant.Server do
 
   @impl true
   def init(opts) do
-    room = Keyword.get(opts, :room, "lobby")
-    Chat.subscribe(room)
     Assistant.subscribe()
 
     state = %{
-      room: room,
       settings: Assistant.get_settings(),
+      personas: [],
+      rooms: MapSet.new(),
+      announced: MapSet.new(),
       queue: :queue.new(),
       task: nil,
       task_supervisor: Keyword.get(opts, :task_supervisor, HoloChat.Assistant.TaskSupervisor)
     }
 
-    {:ok, announce(state)}
+    {:ok, state |> load_personas() |> announce()}
   end
 
   @impl true
   def handle_info({:new_message, message}, state) do
-    if wants_to_answer?(message, state) do
-      {:noreply, state |> enqueue(message) |> maybe_start_next()}
-    else
-      {:noreply, state}
-    end
+    {:noreply, state |> enqueue_mentions(message) |> maybe_start_next()}
   end
 
   def handle_info({:assistant_settings_changed, settings}, state) do
     {:noreply, announce(%{state | settings: settings})}
   end
 
-  def handle_info(:assistant_status_request, state), do: {:noreply, announce(state)}
+  def handle_info({:assistant_personas_changed}, state) do
+    {:noreply, state |> load_personas() |> announce()}
+  end
+
+  def handle_info(:assistant_status_request, state) do
+    {:noreply, announce(%{state | announced: MapSet.new()})}
+  end
+
   def handle_info({:assistant_status, _status}, state), do: {:noreply, state}
 
-  def handle_info({ref, result}, %{task: {ref, _message}} = state) do
+  def handle_info({ref, result}, %{task: {ref, persona, message}} = state) do
     Process.demonitor(ref, [:flush])
-    post_reply(result, state)
+    post_reply(result, persona, message)
     {:noreply, %{state | task: nil} |> announce() |> maybe_start_next()}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: {ref, _message}} = state) do
-    post_reply({:error, {:crashed, reason}}, state)
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: {ref, persona, message}} = state) do
+    post_reply({:error, {:crashed, reason}}, persona, message)
     {:noreply, %{state | task: nil} |> announce() |> maybe_start_next()}
   end
 
-  defp wants_to_answer?(message, %{settings: settings, queue: queue}) do
-    settings.enabled and not message.from_assistant and
-      Assistant.mentioned?(settings.name, message.body) and
-      :queue.len(queue) < @max_queue
+  # Listens to exactly the rooms that have personas.
+  defp load_personas(state) do
+    personas = Assistant.list_personas()
+    rooms = personas |> Enum.flat_map(& &1.rooms) |> MapSet.new()
+
+    Enum.each(MapSet.difference(state.rooms, rooms), &Chat.unsubscribe/1)
+    Enum.each(MapSet.difference(rooms, state.rooms), &Chat.subscribe/1)
+
+    %{state | personas: personas, rooms: rooms}
   end
 
-  defp enqueue(state, message), do: %{state | queue: :queue.in(message, state.queue)}
+  defp enqueue_mentions(%{settings: %{enabled: false}} = state, _message), do: state
+  defp enqueue_mentions(state, %{from_assistant: true}), do: state
+
+  defp enqueue_mentions(state, message) do
+    state.personas
+    |> Enum.filter(&(message.room in &1.rooms and Assistant.mentioned?(&1.name, message.body)))
+    |> Enum.reduce(state, fn persona, state ->
+      if :queue.len(state.queue) < @max_queue,
+        do: %{state | queue: :queue.in({persona, message}, state.queue)},
+        else: state
+    end)
+  end
 
   defp maybe_start_next(%{task: nil} = state) do
     case :queue.out(state.queue) do
-      {{:value, message}, queue} ->
-        settings = state.settings
+      {{:value, {persona, message}}, queue} ->
+        endpoint_url = state.settings.endpoint_url
 
         task =
           Task.Supervisor.async_nolink(state.task_supervisor, fn ->
-            generate(settings, message)
+            generate(endpoint_url, persona, message)
           end)
 
-        announce(%{state | queue: queue, task: {task.ref, message}})
+        announce(%{state | queue: queue, task: {task.ref, persona, message}})
 
       {:empty, _queue} ->
         state
@@ -100,44 +120,62 @@ defmodule HoloChat.Assistant.Server do
   defp maybe_start_next(state), do: state
 
   # Context: the messages before the mention, plus the mention itself.
-  defp generate(settings, message) do
+  defp generate(endpoint_url, persona, message) do
     {history, _more?} =
-      Chat.list_messages_page(message.room, message, settings.context_messages - 1)
+      Chat.list_messages_page(message.room, message, persona.context_messages - 1)
 
-    prompt = Assistant.build_prompt(settings, history ++ [message])
+    prompt = Assistant.build_prompt(persona, history ++ [message])
 
     with {:ok, text} <-
-           LLM.impl().chat(settings.endpoint_url, prompt,
-             max_tokens: settings.max_tokens,
-             temperature: settings.temperature
+           LLM.impl().chat(endpoint_url, prompt,
+             max_tokens: persona.max_tokens,
+             temperature: persona.temperature
            ) do
-      case Assistant.clean_reply(settings.name, text) do
+      case Assistant.clean_reply(persona.name, text) do
         nil -> {:error, :empty_reply}
         reply -> {:ok, reply}
       end
     end
   end
 
-  defp post_reply({:ok, reply}, state) do
-    Chat.create_assistant_message(state.room, state.settings.name, reply)
+  defp post_reply({:ok, reply}, persona, message) do
+    Chat.create_assistant_message(message.room, persona.name, reply)
   end
 
-  defp post_reply({:error, reason}, state) do
-    Logger.warning("Assistant could not answer: #{inspect(reason)}")
-    Chat.create_assistant_message(state.room, state.settings.name, @apology)
+  defp post_reply({:error, reason}, persona, message) do
+    Logger.warning("Assistant #{persona.name} could not answer: #{inspect(reason)}")
+    Chat.create_assistant_message(message.room, persona.name, @apology)
   end
 
+  # Announces every room/persona pair that is online, and takes pairs
+  # that were online before but no longer are (persona removed, renamed,
+  # moved or assistant disabled) offline.
   defp announce(state) do
-    Assistant.broadcast(
-      {:assistant_status,
-       %{
-         room: state.room,
-         name: state.settings.name,
-         online: state.settings.enabled,
-         typing: state.task != nil
-       }}
-    )
+    online =
+      if state.settings.enabled,
+        do: MapSet.new(for p <- state.personas, room <- p.rooms, do: {room, p.name}),
+        else: MapSet.new()
 
-    state
+    typing =
+      case state.task do
+        {_ref, persona, message} -> {message.room, persona.name}
+        nil -> nil
+      end
+
+    for {room, name} = pair <- online do
+      broadcast_status(room, name, true, pair == typing)
+    end
+
+    for {room, name} <- MapSet.difference(state.announced, online) do
+      broadcast_status(room, name, false, false)
+    end
+
+    %{state | announced: online}
+  end
+
+  defp broadcast_status(room, name, online, typing) do
+    Assistant.broadcast(
+      {:assistant_status, %{room: room, name: name, online: online, typing: typing}}
+    )
   end
 end

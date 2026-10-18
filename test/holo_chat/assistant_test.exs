@@ -6,7 +6,8 @@ defmodule HoloChat.AssistantTest do
 
   alias HoloChat.Accounts
   alias HoloChat.Assistant
-  alias HoloChat.Assistant.{LLMMock, Settings}
+  alias HoloChat.Assistant.{LLMMock, Persona, Settings}
+  alias HoloChat.Chat.Message
 
   setup :verify_on_exit!
 
@@ -17,12 +18,8 @@ defmodule HoloChat.AssistantTest do
 
   describe "get_settings/0" do
     test "returns the defaults before anything was saved" do
-      assert %Settings{
-               enabled: false,
-               name: "Holo",
-               endpoint_url: "http://localhost:5001",
-               context_messages: 20
-             } = Assistant.get_settings()
+      assert %Settings{enabled: false, endpoint_url: "http://localhost:5001"} =
+               Assistant.get_settings()
     end
   end
 
@@ -30,26 +27,71 @@ defmodule HoloChat.AssistantTest do
     test "saves the settings and tells subscribers", %{admin: admin} do
       Assistant.subscribe()
 
-      assert {:ok, %Settings{enabled: true, name: "Kobold"}} =
-               Assistant.update_settings(admin, %{"enabled" => "true", "name" => "Kobold"})
+      assert {:ok, %Settings{enabled: true, endpoint_url: "http://gpu:5001"}} =
+               Assistant.update_settings(admin, %{
+                 "enabled" => "true",
+                 "endpoint_url" => "http://gpu:5001/"
+               })
 
-      assert %Settings{enabled: true, name: "Kobold"} = Assistant.get_settings()
-      assert_receive {:assistant_settings_changed, %Settings{name: "Kobold"}}
+      assert %Settings{enabled: true, endpoint_url: "http://gpu:5001"} = Assistant.get_settings()
+      assert_receive {:assistant_settings_changed, %Settings{enabled: true}}
     end
 
     test "updates the single settings record", %{admin: admin} do
-      {:ok, _} = Assistant.update_settings(admin, %{"name" => "First"})
-      {:ok, _} = Assistant.update_settings(admin, %{"name" => "Second"})
+      {:ok, _} = Assistant.update_settings(admin, %{"endpoint_url" => "http://first:5001"})
+      {:ok, _} = Assistant.update_settings(admin, %{"endpoint_url" => "http://second:5001"})
 
       assert Repo.aggregate(Settings, :count) == 1
-      assert Assistant.get_settings().name == "Second"
+      assert Assistant.get_settings().endpoint_url == "http://second:5001"
     end
 
-    test "validates the settings", %{admin: admin} do
+    test "validates the endpoint", %{admin: admin} do
       assert {:error, changeset} =
-               Assistant.update_settings(admin, %{
+               Assistant.update_settings(admin, %{"endpoint_url" => "ftp://example.com"})
+
+      assert "must be an http:// or https:// URL" in errors_on(changeset).endpoint_url
+    end
+
+    test "is only allowed for admins", %{member: member} do
+      assert {:error, :unauthorized} = Assistant.update_settings(member, %{"enabled" => "true"})
+      assert {:error, :unauthorized} = Assistant.update_settings(nil, %{"enabled" => "true"})
+      refute Assistant.get_settings().enabled
+    end
+  end
+
+  describe "create_persona/2" do
+    test "creates a persona with defaults and tells subscribers", %{admin: admin} do
+      Assistant.subscribe()
+
+      assert {:ok, %Persona{} = persona} =
+               Assistant.create_persona(admin, %{"name" => "Sage", "rooms" => ["help"]})
+
+      assert persona.name == "Sage"
+      assert persona.rooms == ["help"]
+      assert persona.context_messages == 20
+      assert persona.system_prompt =~ "{name}"
+      assert_receive {:assistant_personas_changed}
+    end
+
+    test "normalizes and validates rooms", %{admin: admin} do
+      {:ok, persona} =
+        Assistant.create_persona(admin, %{
+          "name" => "Sage",
+          "rooms" => [" Help ", "lobby", "help"]
+        })
+
+      assert persona.rooms == ["help", "lobby"]
+
+      {:error, changeset} =
+        Assistant.create_persona(admin, %{"name" => "Odd", "rooms" => ["no spaces allowed"]})
+
+      assert "contains an invalid room name: no spaces allowed" in errors_on(changeset).rooms
+    end
+
+    test "validates the persona", %{admin: admin} do
+      assert {:error, changeset} =
+               Assistant.create_persona(admin, %{
                  "name" => "no spaces",
-                 "endpoint_url" => "ftp://example.com",
                  "context_messages" => "0",
                  "max_tokens" => "100000",
                  "temperature" => "3"
@@ -57,16 +99,56 @@ defmodule HoloChat.AssistantTest do
 
       errors = errors_on(changeset)
       assert "may only contain letters, digits and underscores" in errors.name
-      assert "must be an http:// or https:// URL" in errors.endpoint_url
       assert errors.context_messages != []
       assert errors.max_tokens != []
       assert errors.temperature != []
     end
 
+    test "requires unique names, ignoring case", %{admin: admin} do
+      {:ok, _} = Assistant.create_persona(admin, %{"name" => "Sage"})
+
+      assert {:error, changeset} = Assistant.create_persona(admin, %{"name" => "SAGE"})
+      assert "has already been taken" in errors_on(changeset).name
+    end
+
     test "is only allowed for admins", %{member: member} do
-      assert {:error, :unauthorized} = Assistant.update_settings(member, %{"name" => "Evil"})
-      assert {:error, :unauthorized} = Assistant.update_settings(nil, %{"name" => "Evil"})
-      assert Assistant.get_settings().name == "Holo"
+      assert {:error, :unauthorized} = Assistant.create_persona(member, %{"name" => "Evil"})
+      assert Assistant.list_personas() == []
+    end
+  end
+
+  describe "update_persona/3 and delete_persona/2" do
+    setup %{admin: admin} do
+      {:ok, persona} = Assistant.create_persona(admin, %{"name" => "Sage", "rooms" => ["help"]})
+      Assistant.subscribe()
+      %{persona: persona}
+    end
+
+    test "update changes the persona and tells subscribers", %{admin: admin, persona: persona} do
+      assert {:ok, %Persona{rooms: ["help", "lobby"]}} =
+               Assistant.update_persona(admin, persona, %{"rooms" => ["help", "lobby"]})
+
+      assert_receive {:assistant_personas_changed}
+    end
+
+    test "delete removes the persona and tells subscribers", %{admin: admin, persona: persona} do
+      assert {:ok, _} = Assistant.delete_persona(admin, persona)
+
+      assert Assistant.list_personas() == []
+      assert_receive {:assistant_personas_changed}
+    end
+
+    test "are only allowed for admins", %{member: member, persona: persona} do
+      assert {:error, :unauthorized} = Assistant.update_persona(member, persona, %{"name" => "X"})
+      assert {:error, :unauthorized} = Assistant.delete_persona(member, persona)
+      assert [%Persona{name: "Sage"}] = Assistant.list_personas()
+    end
+  end
+
+  describe "list_personas/0" do
+    test "lists personas by name", %{admin: admin} do
+      for name <- ~w(Sage Holo), do: Assistant.create_persona(admin, %{"name" => name})
+      assert ["Holo", "Sage"] = Enum.map(Assistant.list_personas(), & &1.name)
     end
   end
 
@@ -86,20 +168,28 @@ defmodule HoloChat.AssistantTest do
 
   describe "build_prompt/2" do
     test "starts with the system prompt and maps the history to chat roles" do
-      settings = %Settings{name: "Holo", system_prompt: "You are {name}."}
+      persona = %Persona{name: "Holo", system_prompt: "You are {name}."}
 
       history = [
-        %HoloChat.Chat.Message{username: "ada", body: "@Holo hi", from_assistant: false},
-        %HoloChat.Chat.Message{username: "Holo", body: "Hello ada!", from_assistant: true},
-        %HoloChat.Chat.Message{username: "bob", body: "@Holo and me?", from_assistant: false}
+        %Message{username: "ada", body: "@Holo hi", from_assistant: false},
+        %Message{username: "Holo", body: "Hello ada!", from_assistant: true},
+        %Message{username: "bob", body: "@Holo and me?", from_assistant: false}
       ]
 
-      assert Assistant.build_prompt(settings, history) == [
+      assert Assistant.build_prompt(persona, history) == [
                %{role: "system", content: "You are Holo."},
                %{role: "user", content: "ada: @Holo hi"},
                %{role: "assistant", content: "Hello ada!"},
                %{role: "user", content: "bob: @Holo and me?"}
              ]
+    end
+
+    test "presents other personas' replies like people's messages" do
+      persona = %Persona{name: "Holo", system_prompt: "You are {name}."}
+      history = [%Message{username: "Sage", body: "Use a GenServer.", from_assistant: true}]
+
+      assert [_system, %{role: "user", content: "Sage: Use a GenServer."}] =
+               Assistant.build_prompt(persona, history)
     end
   end
 
@@ -123,15 +213,15 @@ defmodule HoloChat.AssistantTest do
 
   describe "context_fits?/2" do
     test "checks the worst case (full context of maximum-size messages) against the window" do
-      settings = %Settings{}
+      persona = %Persona{}
 
-      assert Assistant.context_fits?(settings, 65_536)
-      refute Assistant.context_fits?(settings, 2048)
-      assert Assistant.context_fits?(%{settings | context_messages: 2, max_tokens: 256}, 2048)
+      assert Assistant.context_fits?(persona, 65_536)
+      refute Assistant.context_fits?(persona, 2048)
+      assert Assistant.context_fits?(%{persona | context_messages: 2, max_tokens: 256}, 2048)
     end
 
     test "can't tell without a known window" do
-      assert Assistant.context_fits?(%Settings{}, nil)
+      assert Assistant.context_fits?(%Persona{}, nil)
     end
   end
 

@@ -17,12 +17,14 @@ defmodule HoloChatWeb.ChatAssistantTest do
 
   setup %{conn: conn} do
     {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
-    {:ok, _} = Assistant.update_settings(user_scope_fixture(admin), %{"enabled" => "true"})
+    admin = user_scope_fixture(admin)
+    {:ok, _} = Assistant.update_settings(admin, %{"enabled" => "true"})
 
     room = unique_room()
+    {:ok, _} = Assistant.create_persona(admin, %{"name" => "Holo", "rooms" => [room]})
     Presence.subscribe(room)
     on_exit(&await_presence_fetchers/0)
-    start_supervised!({Server, room: room, name: nil})
+    start_supervised!({Server, name: nil})
     await_presence(%{name: "Holo"})
 
     user = user_fixture()

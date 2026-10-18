@@ -7,109 +7,104 @@ defmodule HoloChatWeb.AdminLive.Assistant do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-xl space-y-6 overflow-y-auto py-6">
+      <div class="mx-auto w-full max-w-xl space-y-8 overflow-y-auto py-6">
         <.header>
           AI assistant
           <:subtitle>
-            The assistant idles in #lobby and answers messages that mention it as
-            @{@name}. It needs an OpenAI-compatible server such as koboldcpp.
+            Personas answer messages that mention them as @Name in their rooms.
+            They need an OpenAI-compatible server such as koboldcpp.
           </:subtitle>
         </.header>
 
-        <.form
-          for={@form}
-          id="assistant-settings-form"
-          phx-change="validate"
-          phx-submit="save"
-          class="space-y-1"
-        >
-          <.input field={@form[:enabled]} type="checkbox" label="Enabled" />
-          <.input field={@form[:name]} type="text" label="Name" />
+        <section>
+          <h2 class="mb-2 text-sm font-semibold">Connection</h2>
+          <.form
+            for={@form}
+            id="assistant-settings-form"
+            phx-change="validate"
+            phx-submit="save"
+            class="space-y-1"
+          >
+            <.input field={@form[:enabled]} type="checkbox" label="Enabled" />
 
-          <div class="flex items-end gap-2">
-            <div class="flex-1">
-              <.input
-                field={@form[:endpoint_url]}
-                type="text"
-                label="Endpoint URL"
-                placeholder="http://localhost:5001"
-              />
+            <div class="flex items-end gap-2">
+              <div class="flex-1">
+                <.input
+                  field={@form[:endpoint_url]}
+                  type="text"
+                  label="Endpoint URL"
+                  placeholder="http://localhost:5001"
+                />
+              </div>
+              <button
+                type="button"
+                id="test-connection"
+                phx-click="test_connection"
+                phx-disable-with="Testing…"
+                class="btn btn-soft mb-2"
+              >
+                Test connection
+              </button>
             </div>
-            <button
-              type="button"
-              id="test-connection"
-              phx-click="test_connection"
-              phx-disable-with="Testing…"
-              class="btn btn-soft mb-2"
+            <div id="connection-status" class="-mt-1 mb-3 min-h-5 text-sm">
+              <%= case @connection do %>
+                <% {:ok, info} -> %>
+                  <p class="text-success">
+                    <.icon name="hero-check-circle" class="size-4" /> Connected, serving {info.model}
+                  </p>
+                  <dl class="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-xs opacity-80">
+                    <%= if info.server do %>
+                      <dt>Server</dt>
+                      <dd id="connection-server">{info.server}</dd>
+                    <% end %>
+                    <%= if info.context_length do %>
+                      <dt>Context window</dt>
+                      <dd id="connection-context">{delimit(info.context_length)} tokens</dd>
+                    <% end %>
+                    <%= if info.generation_speed do %>
+                      <dt>Last generation</dt>
+                      <dd id="connection-speed">{format_speed(info.generation_speed)} tokens/s</dd>
+                    <% end %>
+                  </dl>
+                  <p
+                    :if={too_large = oversized_personas(@personas, info.context_length)}
+                    id="context-warning"
+                    class="mt-2 text-warning"
+                  >
+                    <.icon name="hero-exclamation-triangle" class="size-4" />
+                    In a busy room, the context of {Enum.join(too_large, ", ")} can exceed this
+                    model's context window. Lower their context messages or max tokens.
+                  </p>
+                <% {:error, reason} -> %>
+                  <p class="text-error">
+                    <.icon name="hero-x-circle" class="size-4" /> Could not connect: {reason}
+                  </p>
+                <% nil -> %>
+              <% end %>
+            </div>
+
+            <.button variant="primary" phx-disable-with="Saving…">Save connection</.button>
+          </.form>
+        </section>
+
+        <section id="personas">
+          <h2 class="mb-2 text-sm font-semibold">Personas</h2>
+          <p :if={@personas == []} class="text-sm opacity-70">No personas yet.</p>
+          <ul class="divide-y divide-base-300 rounded-xl border border-base-300">
+            <li
+              :for={persona <- @personas}
+              id={"persona-#{persona.id}"}
+              class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
             >
-              Test connection
-            </button>
-          </div>
-          <div id="connection-status" class="-mt-1 mb-3 min-h-5 text-sm">
-            <%= case @connection do %>
-              <% {:ok, info} -> %>
-                <p class="text-success">
-                  <.icon name="hero-check-circle" class="size-4" /> Connected, serving {info.model}
-                </p>
-                <dl class="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-xs opacity-80">
-                  <%= if info.server do %>
-                    <dt>Server</dt>
-                    <dd id="connection-server">{info.server}</dd>
-                  <% end %>
-                  <%= if info.context_length do %>
-                    <dt>Context window</dt>
-                    <dd id="connection-context">{delimit(info.context_length)} tokens</dd>
-                  <% end %>
-                  <%= if info.generation_speed do %>
-                    <dt>Last generation</dt>
-                    <dd id="connection-speed">{format_speed(info.generation_speed)} tokens/s</dd>
-                  <% end %>
-                </dl>
-                <p
-                  :if={!Assistant.context_fits?(@draft_settings, info.context_length)}
-                  id="context-warning"
-                  class="mt-2 text-warning"
-                >
-                  <.icon name="hero-exclamation-triangle" class="size-4" />
-                  With {@draft_settings.context_messages} context messages and {@draft_settings.max_tokens} max tokens, a busy lobby can exceed this
-                  model's context window. Lower one of them.
-                </p>
-              <% {:error, reason} -> %>
-                <p class="text-error">
-                  <.icon name="hero-x-circle" class="size-4" /> Could not connect: {reason}
-                </p>
-              <% nil -> %>
-            <% end %>
-          </div>
-
-          <.input
-            field={@form[:system_prompt]}
-            type="textarea"
-            label="System prompt ({name} is replaced with the assistant's name)"
-            rows="6"
-          />
-
-          <div class="grid gap-x-4 sm:grid-cols-3">
-            <.input
-              field={@form[:context_messages]}
-              type="number"
-              label="Context messages"
-              min="1"
-              max="50"
-            />
-            <.input field={@form[:max_tokens]} type="number" label="Max tokens" min="16" max="4096" />
-            <.input
-              field={@form[:temperature]}
-              type="number"
-              label="Temperature"
-              min="0"
-              max="2"
-              step="0.1"
-            />
-          </div>
-
-          <.button variant="primary" phx-disable-with="Saving…">Save settings</.button>
-        </.form>
+              <span class="font-semibold">@{persona.name}</span>
+              <span class="truncate opacity-70">
+                {if persona.rooms == [],
+                  do: "in no rooms",
+                  else: Enum.map_join(persona.rooms, ", ", &"##{&1}")}
+              </span>
+            </li>
+          </ul>
+        </section>
       </div>
     </Layouts.app>
     """
@@ -117,13 +112,12 @@ defmodule HoloChatWeb.AdminLive.Assistant do
 
   @impl true
   def mount(_params, _session, socket) do
-    settings = Assistant.get_settings()
-
     {:ok,
      socket
      |> assign(:page_title, "AI assistant")
      |> assign(:connection, nil)
-     |> assign_form(Assistant.change_settings(settings))}
+     |> assign(:personas, Assistant.list_personas())
+     |> assign_form(Assistant.change_settings(Assistant.get_settings()))}
   end
 
   @impl true
@@ -162,9 +156,15 @@ defmodule HoloChatWeb.AdminLive.Assistant do
   defp assign_form(socket, changeset) do
     socket
     |> assign(:form, to_form(changeset, as: :settings))
-    |> assign(:name, Ecto.Changeset.get_field(changeset, :name))
     |> assign(:endpoint_url, Ecto.Changeset.get_field(changeset, :endpoint_url))
-    |> assign(:draft_settings, Ecto.Changeset.apply_changes(changeset))
+  end
+
+  # Names of personas whose worst-case prompt may not fit, or nil if all fit.
+  defp oversized_personas(personas, context_length) do
+    case for p <- personas, !Assistant.context_fits?(p, context_length), do: "@#{p.name}" do
+      [] -> nil
+      names -> names
+    end
   end
 
   defp delimit(number) do
