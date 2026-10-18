@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.ChatLive do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.Chat
+  alias HoloChat.{Accounts, Assistant, Chat}
   alias HoloChat.Chat.Message
   alias HoloChatWeb.Presence
 
@@ -10,12 +10,6 @@ defmodule HoloChatWeb.ChatLive do
   @max_avatars 5
   @room_list_size 20
   @page_size 50
-
-  # Literal class strings so Tailwind picks them up.
-  @avatar_colors ~w(
-    bg-rose-500 bg-orange-500 bg-amber-500 bg-lime-600 bg-emerald-600
-    bg-teal-600 bg-sky-600 bg-indigo-500 bg-violet-500 bg-fuchsia-600
-  )
 
   @impl true
   def render(assigns) do
@@ -77,15 +71,24 @@ defmodule HoloChatWeb.ChatLive do
                 title={online_summary(@online_names, @guest_count)}
               >
                 <div class="flex -space-x-1.5">
-                  <div
-                    :for={name <- Enum.take(@online_names, @max_avatars)}
-                    class={[
-                      "grid size-6 place-items-center rounded-full text-[0.65rem] font-semibold text-white ring-2 ring-base-100",
-                      avatar_color(name)
-                    ]}
+                  <button
+                    :for={person <- Enum.take(@online_people, @max_avatars)}
+                    type="button"
+                    phx-click="show_profile"
+                    phx-value-user-id={person.user_id}
+                    phx-value-persona-id={person.persona_id}
+                    data-user-id={person.user_id}
+                    data-persona-id={person.persona_id}
+                    title={person.name}
+                    class="rounded-full ring-2 ring-base-100 transition hover:z-10 hover:scale-110"
                   >
-                    {initial(name)}
-                  </div>
+                    <.avatar
+                      name={person.name}
+                      avatar_id={person.avatar_id}
+                      assistant={person.assistant}
+                      class="size-6 text-[0.65rem]"
+                    />
+                  </button>
                 </div>
                 <span id="online-count" class="flex items-center gap-1.5 text-xs opacity-70">
                   <span class="size-2 animate-pulse rounded-full bg-emerald-500"></span>
@@ -156,22 +159,33 @@ defmodule HoloChatWeb.ChatLive do
                 id={id}
                 class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
               >
-                <div class={[
-                  "grid size-9 shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
-                  if(message.from_assistant,
-                    do: "bg-gradient-to-br from-violet-500 to-fuchsia-500",
-                    else: avatar_color(message.username)
-                  )
-                ]}>
-                  <%= if message.from_assistant do %>
-                    <.icon name="hero-sparkles" class="size-5" />
-                  <% else %>
-                    {initial(message.username)}
-                  <% end %>
-                </div>
+                <% author = author(message, @personas) %>
+                <button
+                  type="button"
+                  phx-click={author.profile? && "show_profile"}
+                  phx-value-user-id={message.user_id}
+                  phx-value-persona-id={message.persona_id}
+                  class={["h-fit shrink-0 rounded-full", author.profile? && "cursor-pointer"]}
+                  aria-label={"Profile of #{author.name}"}
+                >
+                  <.avatar
+                    name={author.name}
+                    avatar_id={author.avatar_id}
+                    assistant={message.from_assistant}
+                  />
+                </button>
                 <div class="min-w-0">
                   <div class="flex items-baseline gap-2">
-                    <span class="text-sm font-semibold">{message.username}</span>
+                    <button
+                      type="button"
+                      data-role="author"
+                      phx-click={author.profile? && "show_profile"}
+                      phx-value-user-id={message.user_id}
+                      phx-value-persona-id={message.persona_id}
+                      class={["text-sm font-semibold", author.profile? && "hover:underline"]}
+                    >
+                      {message.username}
+                    </button>
                     <span
                       :if={message.from_assistant}
                       data-role="assistant-badge"
@@ -305,6 +319,48 @@ defmodule HoloChatWeb.ChatLive do
           </div>
         </div>
       </div>
+
+      <div
+        :if={@profile}
+        class="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+        phx-window-keydown="close_profile"
+        phx-key="Escape"
+      >
+        <div
+          id="profile-card"
+          class="relative w-full max-w-sm rounded-2xl border border-base-300 bg-base-100 p-6 text-center shadow-xl"
+          phx-click-away="close_profile"
+          role="dialog"
+          aria-label={"Profile of #{@profile.name}"}
+        >
+          <button
+            id="close-profile"
+            type="button"
+            phx-click="close_profile"
+            class="absolute top-3 right-3 rounded-lg p-1 opacity-60 transition hover:bg-base-200 hover:opacity-100"
+            aria-label="Close"
+          >
+            <.icon name="hero-x-mark" class="size-5" />
+          </button>
+          <.avatar
+            name={@profile.name}
+            avatar_id={@profile.avatar_id}
+            assistant={@profile.assistant}
+            class="mx-auto size-24 text-3xl"
+          />
+          <h2 class="mt-3 flex items-center justify-center gap-2 text-lg font-semibold">
+            {@profile.name}
+            <span
+              :if={@profile.assistant}
+              data-role="assistant-badge"
+              class="rounded bg-violet-500/15 px-1 text-xs font-semibold tracking-wide text-violet-600"
+            >
+              AI
+            </span>
+          </h2>
+          <p class="mt-2 whitespace-pre-wrap text-sm opacity-80" phx-no-format>{@profile.description || "No description yet."}</p>
+        </div>
+      </div>
     </Layouts.app>
     """
   end
@@ -314,6 +370,7 @@ defmodule HoloChatWeb.ChatLive do
     if connected?(socket) do
       Chat.subscribe_rooms()
       Presence.subscribe_rooms()
+      Assistant.subscribe()
     end
 
     {:ok,
@@ -321,7 +378,9 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(:room, nil)
      |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
      |> assign(:max_avatars, @max_avatars)
-     |> assign(:me, %{name: username(socket.assigns.current_scope), typing: false})
+     |> assign(:me, presence_meta(socket.assigns.current_scope))
+     |> assign(:profile, nil)
+     |> assign_personas()
      |> assign(:typing_timer, nil)
      |> assign(:unread, MapSet.new())
      |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
@@ -441,6 +500,19 @@ defmodule HoloChatWeb.ChatLive do
      |> stream(:messages, Enum.reverse(older), at: 0)}
   end
 
+  def handle_event("show_profile", %{"persona-id" => id}, socket) when id != "" do
+    {:noreply, assign(socket, :profile, persona_profile(id))}
+  end
+
+  def handle_event("show_profile", %{"user-id" => id}, socket) when id != "" do
+    {:noreply, assign(socket, :profile, user_profile(id))}
+  end
+
+  def handle_event("show_profile", _params, socket), do: {:noreply, socket}
+
+  def handle_event("close_profile", _params, socket),
+    do: {:noreply, assign(socket, :profile, nil)}
+
   def handle_event("switch_room", %{"room" => %{"name" => name}}, socket) do
     room = normalize_room(name)
 
@@ -488,6 +560,15 @@ defmodule HoloChatWeb.ChatLive do
     end
   end
 
+  def handle_info({:assistant_personas_changed}, socket), do: {:noreply, assign_personas(socket)}
+
+  # Other assistant events (status, settings) are handled through presence.
+  def handle_info({event, _payload}, socket)
+      when event in [:assistant_status, :assistant_settings_changed],
+      do: {:noreply, socket}
+
+  def handle_info(:assistant_status_request, socket), do: {:noreply, socket}
+
   def handle_info(:typing_timeout, socket) do
     {:noreply, set_typing(socket, false)}
   end
@@ -520,6 +601,17 @@ defmodule HoloChatWeb.ChatLive do
     users = Presence.list_users(socket.assigns.room)
     names = Enum.map(users, fn {_key, meta} -> meta.name end)
 
+    online_people =
+      for {_key, %{name: name} = meta} <- users, name != nil, uniq: true do
+        %{
+          name: name,
+          avatar_id: meta[:avatar_id],
+          user_id: meta[:user_id],
+          persona_id: meta[:persona_id],
+          assistant: meta[:assistant] == true
+        }
+      end
+
     typing_names =
       for {key, %{typing: true} = meta} <- users, key != socket.id, uniq: true do
         meta.name || "Someone"
@@ -527,12 +619,65 @@ defmodule HoloChatWeb.ChatLive do
 
     socket
     |> assign(:online_names, names |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort())
+    |> assign(:online_people, online_people |> Enum.uniq_by(& &1.name) |> Enum.sort_by(& &1.name))
     |> assign(:guest_count, Enum.count(names, &is_nil/1))
     |> assign(:typing_names, Enum.sort(typing_names))
   end
 
-  defp username(%{user: %{username: username}}), do: username
-  defp username(_guest), do: nil
+  # What others see of this view in presence. Guests have no name.
+  defp presence_meta(%{user: user}) do
+    %{name: user.username, typing: false, avatar_id: user.avatar_id, user_id: user.id}
+  end
+
+  defp presence_meta(_guest), do: %{name: nil, typing: false}
+
+  defp user_profile(id) do
+    case Accounts.get_user_profile(id) do
+      nil ->
+        nil
+
+      profile ->
+        %{
+          name: profile.username,
+          avatar_id: profile.avatar_id,
+          description: profile.description,
+          assistant: false
+        }
+    end
+  end
+
+  # Only public fields: never the system prompt.
+  defp persona_profile(id) do
+    case Assistant.get_persona(id) do
+      nil ->
+        nil
+
+      persona ->
+        %{
+          name: persona.name,
+          avatar_id: persona.avatar_id,
+          description: persona.description,
+          assistant: true
+        }
+    end
+  end
+
+  defp assign_personas(socket) do
+    assign(socket, :personas, Map.new(Assistant.list_personas(), &{&1.id, &1}))
+  end
+
+  # Who wrote a message, as shown now: people by their current profile,
+  # personas by their current avatar. Legacy messages have no profile.
+  defp author(%{persona_id: id} = message, personas) when is_integer(id) do
+    persona = personas[id]
+    %{name: message.username, avatar_id: persona && persona.avatar_id, profile?: persona != nil}
+  end
+
+  defp author(%{user: %{avatar_id: avatar_id}} = message, _personas) do
+    %{name: message.username, avatar_id: avatar_id, profile?: true}
+  end
+
+  defp author(message, _personas), do: %{name: message.username, avatar_id: nil, profile?: false}
 
   defp typing_text([name]), do: "#{name} is typing…"
   defp typing_text([a, b]), do: "#{a} and #{b} are typing…"
@@ -574,13 +719,5 @@ defmodule HoloChatWeb.ChatLive do
     |> String.replace(~r/[^a-z0-9]+/, "-")
     |> String.trim("-")
     |> String.slice(0, 32)
-  end
-
-  defp initial(username) do
-    username |> String.first() |> String.upcase()
-  end
-
-  defp avatar_color(username) do
-    Enum.at(@avatar_colors, :erlang.phash2(username, length(@avatar_colors)))
   end
 end

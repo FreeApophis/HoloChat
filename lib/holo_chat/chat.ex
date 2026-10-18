@@ -86,10 +86,15 @@ defmodule HoloChat.Chat do
       |> older_than(before)
       |> order_by(desc: :inserted_at, desc: :id)
       |> limit(^(limit + 1))
+      |> preload(user: ^author_query())
       |> Repo.all()
 
     {messages |> Enum.take(limit) |> Enum.reverse(), length(messages) > limit}
   end
+
+  # Authors come with their public fields only, so password hashes never
+  # travel with messages into LiveViews or over PubSub.
+  defp author_query, do: from(u in User, select: struct(u, [:id, :username, :avatar_id]))
 
   defp older_than(query, nil), do: query
 
@@ -107,6 +112,7 @@ defmodule HoloChat.Chat do
     |> Repo.insert()
     |> case do
       {:ok, message} ->
+        message = Repo.preload(message, user: author_query())
         broadcast_new_message(message)
         {:ok, message}
 

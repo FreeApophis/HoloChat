@@ -9,7 +9,7 @@ defmodule HoloChat.Assistant.Server do
   task so the server stays responsive.
 
   Status changes are broadcast per room and persona as
-  `{:assistant_status, %{room: room, name: name, online: boolean, typing: boolean}}`
+  `{:assistant_status, %{room:, name:, persona_id:, avatar_id:, online:, typing:}}`
   on the assistant topic (see `HoloChat.Assistant.subscribe/0`). Sending
   `:assistant_status_request` on that topic makes the server re-announce.
   """
@@ -151,10 +151,11 @@ defmodule HoloChat.Assistant.Server do
   # that were online before but no longer are (persona removed, renamed,
   # moved or assistant disabled) offline.
   defp announce(state) do
+    # {room, name} => persona, for every pair that should be online.
     online =
       if state.settings.enabled,
-        do: MapSet.new(for p <- state.personas, room <- p.rooms, do: {room, p.name}),
-        else: MapSet.new()
+        do: Map.new(for(p <- state.personas, room <- p.rooms, do: {{room, p.name}, p})),
+        else: %{}
 
     typing =
       case state.task do
@@ -162,20 +163,28 @@ defmodule HoloChat.Assistant.Server do
         nil -> nil
       end
 
-    for {room, name} = pair <- online do
-      broadcast_status(room, name, true, pair == typing)
+    for {{room, _name} = pair, persona} <- online do
+      broadcast_status(room, persona, %{online: true, typing: pair == typing})
     end
 
-    for {room, name} <- MapSet.difference(state.announced, online) do
-      broadcast_status(room, name, false, false)
+    for {room, name} <- MapSet.difference(state.announced, MapSet.new(Map.keys(online))) do
+      broadcast_status(room, %{id: nil, name: name, avatar_id: nil}, %{
+        online: false,
+        typing: false
+      })
     end
 
-    %{state | announced: online}
+    %{state | announced: MapSet.new(Map.keys(online))}
   end
 
-  defp broadcast_status(room, name, online, typing) do
-    Assistant.broadcast(
-      {:assistant_status, %{room: room, name: name, online: online, typing: typing}}
-    )
+  defp broadcast_status(room, persona, flags) do
+    status = %{
+      room: room,
+      name: persona.name,
+      persona_id: persona.id,
+      avatar_id: persona.avatar_id
+    }
+
+    Assistant.broadcast({:assistant_status, Map.merge(status, flags)})
   end
 end

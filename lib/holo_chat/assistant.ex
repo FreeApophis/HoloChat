@@ -73,6 +73,11 @@ defmodule HoloChat.Assistant do
   def get_persona!(id), do: Repo.get!(Persona, id)
 
   @doc """
+  Gets a persona, or nil if it does not exist.
+  """
+  def get_persona(id), do: Repo.get(Persona, id)
+
+  @doc """
   Returns a changeset for editing a persona in a form.
   """
   def change_persona(%Persona{} = persona, attrs \\ %{}) do

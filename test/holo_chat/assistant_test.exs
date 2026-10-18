@@ -202,6 +202,15 @@ defmodule HoloChat.AssistantTest do
     end
   end
 
+  describe "get_persona/1" do
+    test "returns the persona or nil", %{admin: admin} do
+      {:ok, persona} = Assistant.create_persona(admin, %{"name" => "Sage"})
+
+      assert %Persona{name: "Sage"} = Assistant.get_persona(persona.id)
+      assert Assistant.get_persona(-1) == nil
+    end
+  end
+
   describe "list_personas/0" do
     test "lists personas by name", %{admin: admin} do
       for name <- ~w(Sage Holo), do: Assistant.create_persona(admin, %{"name" => name})

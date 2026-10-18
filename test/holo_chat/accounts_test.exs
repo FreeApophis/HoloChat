@@ -378,6 +378,22 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
+  describe "get_user_profile/1" do
+    test "returns only the public profile" do
+      {:ok, user} = Accounts.update_user_profile(user_fixture(), %{"description" => "Hi!"})
+
+      assert Accounts.get_user_profile(user.id) == %{
+               username: user.username,
+               avatar_id: nil,
+               description: "Hi!"
+             }
+    end
+
+    test "returns nil for unknown users" do
+      assert Accounts.get_user_profile(-1) == nil
+    end
+  end
+
   describe "update_user_profile/2" do
     test "saves a trimmed description" do
       user = user_fixture()

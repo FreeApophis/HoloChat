@@ -175,6 +175,25 @@ defmodule HoloChat.Assistant.ServerTest do
     assert_receive {:new_message, %{from_assistant: true, body: "Sorry" <> _}}, 1000
   end
 
+  test "status carries the persona's id and avatar", %{admin: admin, room: room, holo: holo} do
+    {:ok, holo} =
+      Assistant.update_persona_avatar(
+        admin,
+        holo,
+        HoloChat.AvatarFixtures.image_binary(8, 8, {1, 2, 3})
+      )
+
+    enable(admin)
+    Assistant.subscribe()
+    start_server()
+
+    persona_id = holo.id
+    avatar_id = holo.avatar_id
+
+    assert_receive {:assistant_status,
+                    %{room: ^room, persona_id: ^persona_id, avatar_id: ^avatar_id, online: true}}
+  end
+
   test "announces when a persona is typing", %{admin: admin, member: member, room: room} do
     enable(admin)
     Assistant.subscribe()

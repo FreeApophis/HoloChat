@@ -28,8 +28,14 @@ defmodule HoloChatWeb.AssistantPresence do
     {:noreply, Map.delete(tracked, {room, name})}
   end
 
-  def handle_info({:assistant_status, %{room: room, name: name, typing: typing}}, tracked) do
-    meta = %{name: name, typing: typing}
+  def handle_info({:assistant_status, %{room: room, name: name} = status}, tracked) do
+    meta = %{
+      name: name,
+      typing: status.typing,
+      avatar_id: status.avatar_id,
+      persona_id: status.persona_id,
+      assistant: true
+    }
 
     cond do
       tracked[{room, name}] == meta -> :ok

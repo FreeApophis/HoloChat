@@ -67,6 +67,18 @@ defmodule HoloChat.Accounts do
   ## Profile
 
   @doc """
+  Returns the public profile of a user (`username`, `avatar_id`,
+  `description`), or nil if there is no such user.
+  """
+  def get_user_profile(id) do
+    Repo.one(
+      from u in User,
+        where: u.id == ^id,
+        select: %{username: u.username, avatar_id: u.avatar_id, description: u.description}
+    )
+  end
+
+  @doc """
   Returns a changeset for editing the user's public profile.
   """
   def change_user_profile(%User{} = user, attrs \\ %{}) do

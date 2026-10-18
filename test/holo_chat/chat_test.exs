@@ -103,6 +103,23 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "message authors" do
+    test "come with their public profile fields only", %{scope: scope, room: room} do
+      Chat.subscribe(room)
+      message_fixture(scope, room)
+
+      assert_receive {:new_message, broadcast}
+      [listed] = Chat.list_recent_messages(room)
+
+      for message <- [broadcast, listed] do
+        assert message.user.id == scope.user.id
+        assert message.user.username == scope.user.username
+        assert Map.has_key?(message.user, :avatar_id)
+        assert message.user.hashed_password == nil
+      end
+    end
+  end
+
   describe "list_messages_page/3" do
     setup %{scope: scope, room: room} do
       messages = for n <- 1..5, do: message_fixture(scope, room, %{"body" => "m#{n}"})
