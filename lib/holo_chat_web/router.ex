@@ -17,6 +17,11 @@ defmodule HoloChatWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # Public, cacheable images; no session or CSRF needed.
+  scope "/", HoloChatWeb do
+    get "/avatars/:id", AvatarController, :show
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", HoloChatWeb do
   #   pipe_through :api
