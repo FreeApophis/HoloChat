@@ -88,20 +88,47 @@ defmodule HoloChatWeb.AdminLive.Assistant do
         </section>
 
         <section id="personas">
-          <h2 class="mb-2 text-sm font-semibold">Personas</h2>
+          <div class="mb-2 flex items-center justify-between">
+            <h2 class="text-sm font-semibold">Personas</h2>
+            <.link
+              id="new-persona"
+              navigate={~p"/admin/assistant/personas/new"}
+              class="btn btn-soft btn-sm"
+            >
+              <.icon name="hero-plus" class="size-4" /> New persona
+            </.link>
+          </div>
           <p :if={@personas == []} class="text-sm opacity-70">No personas yet.</p>
           <ul class="divide-y divide-base-300 rounded-xl border border-base-300">
             <li
               :for={persona <- @personas}
               id={"persona-#{persona.id}"}
-              class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+              class="flex items-center gap-3 px-3 py-2 text-sm"
             >
               <span class="font-semibold">@{persona.name}</span>
-              <span class="truncate opacity-70">
+              <span class="min-w-0 flex-1 truncate opacity-70">
                 {if persona.rooms == [],
                   do: "in no rooms",
                   else: Enum.map_join(persona.rooms, ", ", &"##{&1}")}
               </span>
+              <.link
+                id={"edit-persona-#{persona.id}"}
+                navigate={~p"/admin/assistant/personas/#{persona.id}/edit"}
+                class="rounded-lg p-1.5 transition hover:bg-base-200"
+                aria-label={"Edit @#{persona.name}"}
+              >
+                <.icon name="hero-pencil-square" class="size-4" />
+              </.link>
+              <button
+                id={"delete-persona-#{persona.id}"}
+                phx-click="delete_persona"
+                phx-value-id={persona.id}
+                data-confirm={"Delete @#{persona.name}? It leaves all its rooms."}
+                class="rounded-lg p-1.5 text-error transition hover:bg-base-200"
+                aria-label={"Delete @#{persona.name}"}
+              >
+                <.icon name="hero-trash" class="size-4" />
+              </button>
             </li>
           </ul>
         </section>
@@ -141,6 +168,16 @@ defmodule HoloChatWeb.AdminLive.Assistant do
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_form(socket, changeset)}
     end
+  end
+
+  def handle_event("delete_persona", %{"id" => id}, socket) do
+    persona = Assistant.get_persona!(id)
+    {:ok, _} = Assistant.delete_persona(socket.assigns.current_scope, persona)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Deleted @#{persona.name}.")
+     |> assign(:personas, Assistant.list_personas())}
   end
 
   def handle_event("test_connection", _params, socket) do
