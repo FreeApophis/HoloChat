@@ -8,7 +8,7 @@ defmodule HoloChatWeb.ScenarioChangeTest do
   import HoloChat.ChatFixtures
   import HoloChat.ScenariosFixtures
 
-  alias HoloChat.Scenarios
+  alias HoloChat.{Rooms, Scenarios}
 
   @intro "#messages [data-role='scenario-intro']"
 
@@ -43,12 +43,12 @@ defmodule HoloChatWeb.ScenarioChangeTest do
 
   defp start_room(conn, scenario) do
     name = unique_room()
-    {:ok, view, _html} = live(conn, ~p"/roleplay/new?scenario=#{scenario.id}")
+    {:ok, view, _html} = live(conn, ~p"/scenarios")
 
     {:ok, view, _html} =
       view
-      |> form("#room-form", room: %{scenario_id: scenario.id})
-      |> render_submit()
+      |> element("#play-scenario-#{scenario.id}")
+      |> render_click()
       |> follow_redirect(conn)
 
     {:ok, view, _html} =
@@ -69,12 +69,6 @@ defmodule HoloChatWeb.ScenarioChangeTest do
     assert has_element?(view, "#scene-settings-link")
     assert has_element?(view, "#scene-cast [data-character-id='#{harry.id}']")
     assert has_element?(view, "#{@intro}[data-scenario-id='#{hogwarts.id}']", "Hogwarts")
-  end
-
-  test "the scenario picker is preselected from the library", %{conn: conn, risa: risa} do
-    {:ok, view, _html} = live(conn, ~p"/roleplay/new?scenario=#{risa.id}")
-
-    assert has_element?(view, "#room-form option[value='#{risa.id}'][selected]")
   end
 
   test "game masters change the scenario and everyone sees the intro",
@@ -127,7 +121,7 @@ defmodule HoloChatWeb.ScenarioChangeTest do
       refute has_element?(watcher, "#scene-header")
       assert has_element?(watcher, "#room-tab-#{name}[data-kind='chat']")
 
-      {:ok, overview, _html} = live(build_conn_with_unique_ip(), ~p"/roleplay")
+      {:ok, overview, _html} = live(build_conn_with_unique_ip(), ~p"/scenarios")
       refute has_element?(overview, "#scene-room-#{name}")
     end
 
@@ -159,14 +153,15 @@ defmodule HoloChatWeb.ScenarioChangeTest do
       conn = build_conn_with_unique_ip() |> log_in_user(admin)
 
       {:ok, view, _html} = live(conn, ~p"/rooms/#{chat_room}")
-      assert has_element?(view, "#start-scene-link[href='/roleplay/new?room=#{chat_room}']")
+      assert has_element?(view, "#start-scene-link[href='/scenarios?room=#{chat_room}']")
 
-      {:ok, view, _html} = live(conn, ~p"/roleplay/new?room=#{chat_room}")
+      {:ok, view, _html} = live(conn, ~p"/scenarios?room=#{chat_room}")
+      assert has_element?(view, "#scene-channel", chat_room)
 
       {:ok, view, _html} =
         view
-        |> form("#room-form", room: %{name: chat_room, scenario_id: risa.id})
-        |> render_submit()
+        |> element("#play-scenario-#{risa.id}")
+        |> render_click()
         |> follow_redirect(conn, ~p"/rooms/#{chat_room}")
 
       assert has_element?(view, "#scene-title", "Risa")
@@ -181,14 +176,11 @@ defmodule HoloChatWeb.ScenarioChangeTest do
       refute has_element?(view, "#start-scene-link")
 
       # Even through a hand-made link that names the chat room.
-      {:ok, view, _html} = live(conn, ~p"/roleplay/new?room=#{chat_room}")
-
-      html =
-        view
-        |> form("#room-form", room: %{name: chat_room, scenario_id: risa.id})
-        |> render_submit()
+      {:ok, view, _html} = live(conn, ~p"/scenarios?room=#{chat_room}")
+      html = view |> element("#play-scenario-#{risa.id}") |> render_click()
 
       assert html =~ "is already taken"
+      assert Rooms.get_room(chat_room) == nil
     end
   end
 end

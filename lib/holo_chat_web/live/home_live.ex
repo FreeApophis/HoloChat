@@ -115,7 +115,7 @@ defmodule HoloChatWeb.HomeLive do
             <.link
               :if={@current_scope}
               id="landing-roleplay"
-              navigate={~p"/roleplay"}
+              navigate={~p"/scenarios"}
               class="group inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:shadow-cyan-400/40"
             >
               <.icon name="hero-sparkles" class="size-4 text-violet-600" /> Find a scene
@@ -194,7 +194,7 @@ defmodule HoloChatWeb.HomeLive do
             No headset, no download, no safety protocols to disable. Just a name and a little imagination.
           </p>
           <.link
-            navigate={if(@current_scope, do: ~p"/roleplay", else: ~p"/users/register")}
+            navigate={if(@current_scope, do: ~p"/scenarios", else: ~p"/users/register")}
             class="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 shadow-md transition hover:-translate-y-0.5 hover:shadow-xl"
           >
             {if @current_scope, do: "Browse the scenes", else: "Join HoloChat"}

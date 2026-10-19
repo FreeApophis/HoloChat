@@ -40,7 +40,7 @@ defmodule HoloChatWeb.HomeLiveTest do
       {:ok, view, _html} = live(conn, ~p"/")
 
       assert has_element?(view, "#landing-enter[href='/rooms/lobby']")
-      assert has_element?(view, "#landing-roleplay[href='/roleplay']")
+      assert has_element?(view, "#landing-roleplay[href='/scenarios']")
       refute has_element?(view, "#landing-signup")
     end
   end

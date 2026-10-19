@@ -55,10 +55,10 @@ defmodule HoloChatWeb.Layouts do
           </.link>
           <.link
             id="roleplay-nav-link"
-            navigate={~p"/roleplay"}
+            navigate={~p"/scenarios"}
             class="rounded-lg p-1.5 text-violet-600 transition hover:bg-base-200"
-            aria-label="Role-play scenes"
-            title="Role-play scenes"
+            aria-label="Scenarios and scenes"
+            title="Scenarios and scenes"
           >
             <.icon name="hero-sparkles" class="size-5" />
           </.link>

@@ -94,8 +94,8 @@ defmodule HoloChatWeb.RoleplayCastTest do
     end
 
     test "the overview card shows the scene's tags", %{room: room, tag: tag} do
-      {:ok, view, _html} = live(build_conn_with_unique_ip(), ~p"/roleplay")
-      assert has_element?(view, "#scenario-card-#{room.scenario_id} [data-tag='#{tag}']")
+      {:ok, view, _html} = live(build_conn_with_unique_ip(), ~p"/scenarios")
+      assert has_element?(view, "#scenario-#{room.scenario_id} [data-tag='#{tag}']")
     end
   end
 end

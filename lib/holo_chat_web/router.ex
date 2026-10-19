@@ -54,9 +54,8 @@ defmodule HoloChatWeb.Router do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/profile", UserLive.Profile, :edit
 
-      # Creating and managing role-play rooms needs an account; game master
-      # rights are checked in the LiveView, since they are per room.
-      live "/roleplay/new", RoleplayLive.New, :new
+      # Managing scenes needs an account; game master rights are checked in
+      # the LiveView, since they are per scene.
       live "/rooms/:room/settings", RoleplayLive.Settings, :edit
       # Scenes waiting for a channel have no room name yet.
       live "/scenes/:id/settings", RoleplayLive.Settings, :edit
@@ -93,7 +92,6 @@ defmodule HoloChatWeb.Router do
 
       # Guests can read the chat; posting requires a user.
       live "/rooms/:room", ChatLive
-      live "/roleplay", RoleplayLive.Index, :index
       live "/characters", CharacterLive.Index, :index
       live "/characters/:id", CharacterLive.Show, :show
       live "/scenarios", ScenarioLive.Index, :index

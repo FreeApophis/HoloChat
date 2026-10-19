@@ -232,7 +232,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     {room, back} =
       case params do
         %{"room" => name} -> {Rooms.get_room(name), ~p"/rooms/#{name}"}
-        %{"id" => id} -> {Rooms.get_scene(id), ~p"/roleplay"}
+        %{"id" => id} -> {Rooms.get_scene(id), ~p"/scenarios"}
       end
 
     if room && Rooms.can_manage?(scope, room) do

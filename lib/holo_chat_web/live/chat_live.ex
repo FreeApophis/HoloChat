@@ -346,7 +346,7 @@ defmodule HoloChatWeb.ChatLive do
             <.link
               :if={!@scene && @room != "lobby" && Accounts.admin?(@current_scope)}
               id="start-scene-link"
-              navigate={~p"/roleplay/new?room=#{@room}"}
+              navigate={~p"/scenarios?room=#{@room}"}
               class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-violet-600 transition hover:bg-violet-500/10"
             >
               <.icon name="hero-sparkles" class="size-4" /> Start a scenario here

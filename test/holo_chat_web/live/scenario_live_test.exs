@@ -26,11 +26,6 @@ defmodule HoloChatWeb.ScenarioLiveTest do
              )
     end
 
-    test "is linked from the role-play overview", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/roleplay")
-      assert has_element?(view, "#scenarios-link[href='/scenarios']")
-    end
-
     test "offers guests neither creating nor starting", %{conn: conn} do
       scenario = scenario_fixture(user_scope_fixture())
       {:ok, view, _html} = live(conn, ~p"/scenarios")
@@ -99,16 +94,6 @@ defmodule HoloChatWeb.ScenarioLiveTest do
 
       assert {:error, {:redirect, %{to: "/scenarios"}}} =
                live(conn, ~p"/scenarios/#{scenario.id}/edit")
-    end
-
-    test "starts a room from a scenario card", %{conn: conn} do
-      scenario = scenario_fixture(user_scope_fixture())
-      {:ok, view, _html} = live(conn, ~p"/scenarios")
-
-      assert has_element?(
-               view,
-               "#play-scenario-#{scenario.id}[href='/roleplay/new?scenario=#{scenario.id}']"
-             )
     end
   end
 
