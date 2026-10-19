@@ -39,6 +39,16 @@ defmodule HoloChat.Accounts do
   """
   def get_user!(id), do: Repo.get!(User, id)
 
+  @doc """
+  Gets a single user, or nil.
+  """
+  def get_user(id) do
+    case Ecto.Type.cast(:id, id) do
+      {:ok, id} -> Repo.get(User, id)
+      :error -> nil
+    end
+  end
+
   ## User registration
 
   @doc """
@@ -108,11 +118,16 @@ defmodule HoloChat.Accounts do
     end)
   end
 
-  ## Admins
+  ## Roles
+
+  # Site-wide roles. Admins grant them (and may do everything moderators and
+  # library editors do); moderators manage any room; library editors edit
+  # any scenario and character.
+  @roles %{admin: :is_admin, moderator: :is_moderator, library_editor: :is_library_editor}
 
   @doc """
-  Grants (`true`) or revokes (`false`) admin rights. Only meant for
-  operators (see `mix holo_chat.admin`); there is no web path to it.
+  Grants (`true`) or revokes (`false`) admin rights by username. Meant for
+  operators (see `mix holo_chat.admin`); admins use `set_role/4`.
   """
   def set_admin(username, admin?) when is_binary(username) and is_boolean(admin?) do
     case get_user_by_username(username) do
@@ -126,6 +141,61 @@ defmodule HoloChat.Accounts do
   """
   def admin?(%Scope{user: %User{is_admin: true}}), do: true
   def admin?(_scope), do: false
+
+  @doc """
+  Returns true if the scope belongs to a moderator or an admin.
+  """
+  def moderator?(%Scope{user: %User{is_moderator: true}}), do: true
+  def moderator?(scope), do: admin?(scope)
+
+  @doc """
+  Returns true if the scope belongs to a library editor or an admin.
+  """
+  def library_editor?(%Scope{user: %User{is_library_editor: true}}), do: true
+  def library_editor?(scope), do: admin?(scope)
+
+  @doc """
+  Grants (`true`) or revokes (`false`) the site-wide `role` (`:admin`,
+  `:moderator` or `:library_editor`) of the user with the given id. Only
+  admins may, and they cannot revoke their own admin rights.
+  """
+  def set_role(scope, user_id, role, granted?) when is_boolean(granted?) do
+    with true <- admin?(scope) || {:error, :unauthorized},
+         {:ok, field} <- Map.fetch(@roles, role) |> or_not_found(),
+         %User{} = user <- get_user(user_id) || {:error, :not_found},
+         :ok <- keep_own_admin(scope, user, role, granted?) do
+      user |> Ecto.Changeset.change([{field, granted?}]) |> Repo.update()
+    end
+  end
+
+  defp or_not_found(:error), do: {:error, :not_found}
+  defp or_not_found(ok), do: ok
+
+  defp keep_own_admin(%Scope{user: %User{id: id}}, %User{id: id}, :admin, false),
+    do: {:error, :own_admin}
+
+  defp keep_own_admin(_scope, _user, _role, _granted?), do: :ok
+
+  @doc """
+  Returns up to 50 users whose name contains `query` (ignoring case), by
+  name, with their roles. Only for admins.
+  """
+  def search_users(scope, query) when is_binary(query) do
+    if admin?(scope) do
+      escaped = String.replace(String.trim(query), ["\\", "%", "_"], &("\\" <> &1))
+      pattern = "%" <> escaped <> "%"
+
+      {:ok,
+       Repo.all(
+         from u in User,
+           where: ilike(u.username, ^pattern),
+           order_by: u.username,
+           limit: 50
+       )}
+    else
+      {:error, :unauthorized}
+    end
+  end
 
   ## Settings
 

@@ -138,6 +138,77 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "moderators" do
+    test "manage any room and start scenarios in rooms nobody runs" do
+      moderator = role_scope_fixture(:moderator)
+      room = roleplay_room_fixture(user_scope_fixture())
+      assert Rooms.can_manage?(moderator, room)
+
+      chat_room = unique_room()
+      message_fixture(user_scope_fixture(), chat_room)
+      scenario = scenario_fixture(moderator)
+
+      assert {:ok, %Room{name: ^chat_room}} =
+               Rooms.start_scenario(moderator, chat_room, scenario.id)
+
+      refute Rooms.can_manage?(role_scope_fixture(:library_editor), room)
+    end
+  end
+
+  describe "appoint_game_master/3" do
+    setup do
+      %{admin: role_scope_fixture(:admin), user: user_fixture()}
+    end
+
+    test "makes a user game master of a room with a record", %{admin: admin, user: user} do
+      room = roleplay_room_fixture(user_scope_fixture())
+
+      assert {:ok, %Room{id: id}} = Rooms.appoint_game_master(admin, room.name, user.id)
+      assert id == room.id
+      assert Rooms.game_master?(user_scope_fixture(user), room)
+    end
+
+    test "gives an older chat room a record", %{admin: admin, user: user} do
+      chat_room = unique_room()
+      message_fixture(user_scope_fixture(), chat_room)
+
+      assert {:ok, %Room{name: ^chat_room, scenario_id: nil} = room} =
+               Rooms.appoint_game_master(admin, chat_room, user.id)
+
+      assert Rooms.game_master?(user_scope_fixture(user), room)
+    end
+
+    test "refuses unused rooms, the lobby, unknown users and non-moderators",
+         %{admin: admin, user: user} do
+      assert {:error, :not_found} = Rooms.appoint_game_master(admin, unique_room(), user.id)
+      assert {:error, :lobby} = Rooms.appoint_game_master(admin, "lobby", user.id)
+
+      room = roleplay_room_fixture(user_scope_fixture())
+      assert {:error, :not_found} = Rooms.appoint_game_master(admin, room.name, -1)
+
+      assert {:error, :unauthorized} =
+               Rooms.appoint_game_master(user_scope_fixture(), room.name, user.id)
+    end
+
+    test "moderators may appoint too", %{user: user} do
+      room = roleplay_room_fixture(user_scope_fixture())
+
+      assert {:ok, _room} =
+               Rooms.appoint_game_master(role_scope_fixture(:moderator), room.name, user.id)
+    end
+  end
+
+  describe "list_mastered_rooms/1" do
+    test "returns the names of the rooms a user masters, by name" do
+      gm = user_scope_fixture()
+      first = roleplay_room_fixture(gm, %{"name" => "b" <> unique_room()})
+      second = roleplay_room_fixture(gm, %{"name" => "a" <> unique_room()})
+      roleplay_room_fixture(user_scope_fixture())
+
+      assert Rooms.list_mastered_rooms(gm.user.id) == Enum.sort([first.name, second.name])
+    end
+  end
+
   describe "post_message/3 in a new channel" do
     test "makes the first poster its game master" do
       creator = user_scope_fixture()
@@ -368,6 +439,11 @@ defmodule HoloChat.RoomsTest do
 
     test "cannot remove the last one", %{gm: gm, room: room} do
       assert {:error, :last_game_master} = Rooms.remove_game_master(gm, room, gm.user.id)
+    end
+
+    test "admins and moderators may remove the last one", %{gm: gm, room: room} do
+      assert :ok = Rooms.remove_game_master(role_scope_fixture(:moderator), room, gm.user.id)
+      assert Rooms.list_game_masters(room) == []
     end
 
     test "reports unknown users and refuses players", %{gm: gm, room: room} do

@@ -72,10 +72,11 @@ defmodule HoloChat.Scenarios do
   def create_scenario(_scope, _attrs), do: {:error, :unauthorized}
 
   @doc """
-  Returns true if the scope may change the scenario: its owner or an admin.
+  Returns true if the scope may change the scenario: its owner or a library
+  editor (or admin).
   """
   def can_edit?(%Scope{user: %User{id: id}}, %Scenario{owner_id: id}), do: true
-  def can_edit?(scope, %Scenario{}), do: Accounts.admin?(scope)
+  def can_edit?(scope, %Scenario{}), do: Accounts.library_editor?(scope)
 
   @doc """
   Updates the scenario's text and announces the change.

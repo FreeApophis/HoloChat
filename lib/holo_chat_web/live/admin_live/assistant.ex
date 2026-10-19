@@ -14,6 +14,15 @@ defmodule HoloChatWeb.AdminLive.Assistant do
             Personas answer messages that mention them as @Name in their rooms.
             They need an OpenAI-compatible server such as koboldcpp.
           </:subtitle>
+          <:actions>
+            <.link
+              id="admin-users-link"
+              navigate={~p"/admin/users"}
+              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium opacity-70 transition hover:bg-base-200 hover:opacity-100"
+            >
+              <.icon name="hero-users" class="size-4" /> Users and roles
+            </.link>
+          </:actions>
         </.header>
 
         <section>

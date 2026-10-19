@@ -7,7 +7,8 @@ defmodule Mix.Tasks.HoloChat.Admin do
       $ mix holo_chat.admin grant USERNAME
       $ mix holo_chat.admin revoke USERNAME
 
-  Admins can configure the AI assistant at `/admin/assistant`.
+  Admins configure the AI assistant at `/admin/assistant` and give users
+  roles (including admin) at `/admin/users`.
   """
 
   use Mix.Task

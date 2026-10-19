@@ -1351,9 +1351,9 @@ defmodule HoloChatWeb.ChatLive do
     )
   end
 
-  # A room's game masters start its scenarios; admins also those of rooms
-  # nobody runs.
-  defp can_start_scenario?(%{scene: nil, current_scope: scope}), do: Accounts.admin?(scope)
+  # A room's game masters start its scenarios; moderators also those of
+  # rooms nobody runs.
+  defp can_start_scenario?(%{scene: nil, current_scope: scope}), do: Accounts.moderator?(scope)
   defp can_start_scenario?(%{can_manage_scene?: can_manage?}), do: can_manage?
 
   defp assign_personas(socket) do

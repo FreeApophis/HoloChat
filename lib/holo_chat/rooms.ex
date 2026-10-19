@@ -118,15 +118,15 @@ defmodule HoloChat.Rooms do
   playing the scenario `"scenario_id"` with its suggested cast. The scenario
   is announced in the chat.
 
-  The name must be a valid room name that no room uses yet. Admins may turn
-  an existing chat room other than the lobby into a scene.
+  The name must be a valid room name that no room uses yet. Moderators and
+  admins may turn an existing chat room other than the lobby into a scene.
   """
   def create_roleplay_room(%Scope{user: %User{} = user} = scope, attrs) do
     changeset =
       %Room{kind: "roleplay"}
       |> Room.create_changeset(attrs)
       |> Ecto.Changeset.validate_change(:name, fn :name, name ->
-        validate_new_name(name, Accounts.admin?(scope))
+        validate_new_name(name, Accounts.moderator?(scope))
       end)
 
     Repo.transact(fn ->
@@ -143,12 +143,12 @@ defmodule HoloChat.Rooms do
   def create_roleplay_room(_scope, _attrs), do: {:error, :unauthorized}
 
   # Names of existing role-play rooms are caught by the unique index.
-  defp validate_new_name(name, admin?) do
+  defp validate_new_name(name, moderator?) do
     cond do
       not Chat.valid_room?(name) ->
         [name: "may only contain lowercase letters, digits and dashes (up to 32)"]
 
-      name == "lobby" or (Chat.room_used?(name) and not admin?) ->
+      name == "lobby" or (Chat.room_used?(name) and not moderator?) ->
         [name: "is already taken"]
 
       true ->
@@ -174,9 +174,10 @@ defmodule HoloChat.Rooms do
   def game_master?(_scope, _room), do: false
 
   @doc """
-  Returns true if the scope may manage the room: its game masters and admins.
+  Returns true if the scope may manage the room: its game masters,
+  moderators and admins.
   """
-  def can_manage?(scope, room), do: Accounts.admin?(scope) or game_master?(scope, room)
+  def can_manage?(scope, room), do: Accounts.moderator?(scope) or game_master?(scope, room)
 
   @doc """
   Updates the room's settings (how the cast takes turns) and announces the
@@ -289,12 +290,67 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Removes a game master. Every room keeps at least one.
+  Removes a game master. Game masters keep at least one; moderators and
+  admins may also remove the last, leaving the room to them.
   """
   def remove_game_master(scope, %Room{} = room, user_id) do
     authorize(scope, room, fn ->
-      room |> delete_game_master(user_id) |> ok_without_value()
+      if Accounts.moderator?(scope) do
+        Repo.delete_all(
+          from gm in GameMaster, where: gm.room_id == ^room.id and gm.user_id == ^user_id
+        )
+
+        :ok
+      else
+        room |> delete_game_master(user_id) |> ok_without_value()
+      end
     end)
+  end
+
+  @doc """
+  Makes the user with the given id a game master of the room called `name`,
+  for moderators and admins. A room that has been used but has no record
+  yet (an older chat room) gets one. The lobby has no game masters.
+  """
+  def appoint_game_master(scope, name, user_id) do
+    cond do
+      not Accounts.moderator?(scope) ->
+        {:error, :unauthorized}
+
+      name == "lobby" ->
+        {:error, :lobby}
+
+      true ->
+        with %User{} = user <- Accounts.get_user(user_id) || {:error, :not_found},
+             %Room{} = room <- get_room(name) || record_used_room(name) do
+          Repo.insert!(%GameMaster{room_id: room.id, user_id: user.id}, on_conflict: :nothing)
+          broadcast_update({:ok, room})
+        end
+    end
+  end
+
+  defp record_used_room(name) do
+    if Chat.room_used?(name) do
+      Repo.insert!(%Room{name: name, kind: "chat"}, on_conflict: :nothing)
+      get_room(name)
+    else
+      {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Returns the names of the rooms the user with the given id masters, by
+  name.
+  """
+  def list_mastered_rooms(user_id) do
+    Repo.all(
+      from r in Room,
+        join: gm in GameMaster,
+        on: gm.room_id == r.id,
+        where: gm.user_id == ^user_id,
+        order_by: r.name,
+        select: r.name
+    )
   end
 
   defp ok_without_value({:ok, _value}), do: :ok

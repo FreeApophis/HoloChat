@@ -120,10 +120,11 @@ defmodule HoloChat.Characters do
   def create_character(_scope, _attrs), do: {:error, :unauthorized}
 
   @doc """
-  Returns true if the scope may change the character: its owner or an admin.
+  Returns true if the scope may change the character: its owner or a library
+  editor (or admin).
   """
   def can_edit?(%Scope{user: %User{id: id}}, %Character{owner_id: id}), do: true
-  def can_edit?(scope, %Character{}), do: Accounts.admin?(scope)
+  def can_edit?(scope, %Character{}), do: Accounts.library_editor?(scope)
 
   @doc """
   Updates the character sheet.

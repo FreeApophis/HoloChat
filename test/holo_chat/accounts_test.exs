@@ -478,6 +478,78 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
+  describe "set_role/4" do
+    setup do
+      %{admin: role_scope_fixture(:admin), user: user_fixture()}
+    end
+
+    test "grants and revokes site-wide roles", %{admin: admin, user: user} do
+      roles = [admin: :is_admin, moderator: :is_moderator, library_editor: :is_library_editor]
+
+      for {role, field} <- roles do
+        assert {:ok, %User{} = granted} = Accounts.set_role(admin, user.id, role, true)
+        assert Map.fetch!(granted, field)
+        assert {:ok, %User{} = revoked} = Accounts.set_role(admin, "#{user.id}", role, false)
+        refute Map.fetch!(revoked, field)
+      end
+    end
+
+    test "is only for admins", %{user: user} do
+      assert {:error, :unauthorized} =
+               Accounts.set_role(role_scope_fixture(:moderator), user.id, :moderator, true)
+
+      assert {:error, :unauthorized} = Accounts.set_role(nil, user.id, :moderator, true)
+    end
+
+    test "keeps admins from revoking their own admin rights", %{admin: admin} do
+      assert {:error, :own_admin} = Accounts.set_role(admin, admin.user.id, :admin, false)
+      assert Accounts.get_user!(admin.user.id).is_admin
+    end
+
+    test "reports unknown users and roles", %{admin: admin, user: user} do
+      assert {:error, :not_found} = Accounts.set_role(admin, -1, :moderator, true)
+      assert {:error, :not_found} = Accounts.set_role(admin, user.id, :overlord, true)
+    end
+  end
+
+  describe "moderator?/1 and library_editor?/1" do
+    test "hold for users with the role and for admins" do
+      admin = role_scope_fixture(:admin)
+      moderator = role_scope_fixture(:moderator)
+      editor = role_scope_fixture(:library_editor)
+      user = user_scope_fixture()
+
+      assert Accounts.moderator?(moderator)
+      assert Accounts.moderator?(admin)
+      refute Accounts.moderator?(editor)
+      refute Accounts.moderator?(user)
+      refute Accounts.moderator?(nil)
+
+      assert Accounts.library_editor?(editor)
+      assert Accounts.library_editor?(admin)
+      refute Accounts.library_editor?(moderator)
+      refute Accounts.library_editor?(nil)
+
+      refute Accounts.admin?(moderator)
+    end
+  end
+
+  describe "search_users/2" do
+    test "finds users by part of their name, for admins only" do
+      admin = role_scope_fixture(:admin)
+      user = user_fixture()
+      part = user.username |> String.slice(2, 6) |> String.upcase()
+
+      assert {:ok, users} = Accounts.search_users(admin, part)
+      assert Enum.any?(users, &(&1.id == user.id))
+
+      assert {:ok, users} = Accounts.search_users(admin, "")
+      assert length(users) <= 50
+
+      assert {:error, :unauthorized} = Accounts.search_users(user_scope_fixture(), part)
+    end
+  end
+
   describe "inspect/2 for the User module" do
     test "does not include password" do
       refute inspect(%User{password: "123456"}) =~ "password: \"123456\""

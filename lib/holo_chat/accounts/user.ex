@@ -9,6 +9,8 @@ defmodule HoloChat.Accounts.User do
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :is_admin, :boolean, default: false
+    field :is_moderator, :boolean, default: false
+    field :is_library_editor, :boolean, default: false
     field :description, :string
     field :avatar_id, :binary_id
     field :authenticated_at, :utc_datetime, virtual: true

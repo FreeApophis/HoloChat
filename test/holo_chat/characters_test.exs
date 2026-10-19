@@ -32,6 +32,8 @@ defmodule HoloChat.CharactersTest do
       assert character.owner_id == scope.user.id
       assert Characters.can_edit?(scope, character)
       refute Characters.can_edit?(user_scope_fixture(), character)
+      assert Characters.can_edit?(role_scope_fixture(:library_editor), character)
+      refute Characters.can_edit?(role_scope_fixture(:moderator), character)
     end
 
     test "validates the name and refuses guests" do

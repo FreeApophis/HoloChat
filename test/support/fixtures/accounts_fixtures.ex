@@ -45,6 +45,20 @@ defmodule HoloChat.AccountsFixtures do
     Scope.for_user(user)
   end
 
+  @doc """
+  Returns the scope of a new user with the site-wide `role` (`:admin`,
+  `:moderator` or `:library_editor`).
+  """
+  def role_scope_fixture(:admin) do
+    {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+    Scope.for_user(admin)
+  end
+
+  def role_scope_fixture(role) do
+    {:ok, user} = Accounts.set_role(role_scope_fixture(:admin), user_fixture().id, role, true)
+    Scope.for_user(user)
+  end
+
   def override_token_authenticated_at(token, authenticated_at) when is_binary(token) do
     HoloChat.Repo.update_all(
       from(t in Accounts.UserToken,

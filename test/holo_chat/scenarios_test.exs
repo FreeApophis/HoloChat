@@ -100,6 +100,15 @@ defmodule HoloChat.ScenariosTest do
       assert {:error, :unauthorized} = Scenarios.update_scenario(nil, s, %{"topic" => "x"})
       refute Scenarios.can_edit?(user_scope_fixture(), s)
     end
+
+    test "library editors may edit any scenario" do
+      s = scenario_fixture(user_scope_fixture())
+      editor = role_scope_fixture(:library_editor)
+
+      assert Scenarios.can_edit?(editor, s)
+      assert {:ok, _} = Scenarios.update_scenario(editor, s, %{"topic" => "Edited"})
+      refute Scenarios.can_edit?(role_scope_fixture(:moderator), s)
+    end
   end
 
   describe "update_scenario_image/4" do

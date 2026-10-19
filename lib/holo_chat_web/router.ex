@@ -76,6 +76,7 @@ defmodule HoloChatWeb.Router do
 
     live_session :require_admin, on_mount: [{HoloChatWeb.UserAuth, :require_admin}] do
       live "/assistant", AdminLive.Assistant, :edit
+      live "/users", AdminLive.Users, :index
       live "/assistant/personas/new", AdminLive.PersonaForm, :new
       live "/assistant/personas/:id/edit", AdminLive.PersonaForm, :edit
     end
