@@ -155,6 +155,24 @@ defmodule HoloChat.Chat do
     end
   end
 
+  @doc """
+  Posts a message written by the cast character `character_id` (played by
+  the model) under its `name`, and broadcasts it.
+  """
+  def create_character_message(room, name, body, character_id) do
+    %Message{room: room, username: name, from_assistant: true, character_id: character_id}
+    |> Message.changeset(%{body: truncate(body, @max_body_length)})
+    |> Repo.insert()
+    |> case do
+      {:ok, message} ->
+        broadcast_new_message(message)
+        {:ok, message}
+
+      error ->
+        error
+    end
+  end
+
   defp truncate(text, max) do
     if String.length(text) > max, do: String.slice(text, 0, max - 1) <> "…", else: text
   end

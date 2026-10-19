@@ -1,12 +1,20 @@
 defmodule HoloChat.Assistant do
   @moduledoc """
   The AI assistants: the admin-managed connection to the language model
-  server, and the personas that answer to `@name` in their rooms. They run
-  inside `HoloChat.Assistant.Server`.
+  server, the personas that answer to `@name` in their rooms, and the cast
+  characters it plays in role-play scenes. They run inside
+  `HoloChat.Assistant.Server`.
   """
 
   use Boundary,
-    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars, HoloChat.Chat],
+    deps: [
+      HoloChat.Repo,
+      HoloChat.Accounts,
+      HoloChat.Avatars,
+      HoloChat.Characters,
+      HoloChat.Chat,
+      HoloChat.Rooms
+    ],
     exports: [Settings, Persona, LLM, Server]
 
   import Ecto.Query, warn: false

@@ -19,6 +19,7 @@ defmodule HoloChat.Rooms do
   alias HoloChat.Rooms.{CastMember, GameMaster, Room}
 
   @pubsub HoloChat.PubSub
+  @scenes_topic "scenes"
   @image_sizes %{card: {640, 360}, background: {1600, 900}}
 
   @doc """
@@ -32,6 +33,22 @@ defmodule HoloChat.Rooms do
   Stops receiving changes of the room called `name`.
   """
   def unsubscribe(name), do: Phoenix.PubSub.unsubscribe(@pubsub, topic(name))
+
+  @doc """
+  Subscribes the calling process to changes of any scene (its settings or
+  cast). Subscribers receive `{:scene_changed, name}`.
+  """
+  def subscribe_scenes, do: Phoenix.PubSub.subscribe(@pubsub, @scenes_topic)
+
+  @doc """
+  Returns every role-play room that has a cast, as `{room, cast}` pairs.
+  """
+  def list_staged_scenes do
+    rooms =
+      Repo.all(from r in Room, join: cm in CastMember, on: cm.room_id == r.id, distinct: true)
+
+    Enum.map(rooms, &{&1, list_cast(&1)})
+  end
 
   @doc """
   Returns all role-play rooms, newest first.
@@ -270,6 +287,7 @@ defmodule HoloChat.Rooms do
 
   defp broadcast_update({:ok, %Room{} = room} = result) do
     Phoenix.PubSub.broadcast(@pubsub, topic(room.name), {:room_updated, room})
+    Phoenix.PubSub.broadcast(@pubsub, @scenes_topic, {:scene_changed, room.name})
     result
   end
 

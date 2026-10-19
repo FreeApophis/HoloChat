@@ -2,6 +2,7 @@ defmodule HoloChat.ChatTest do
   use HoloChat.DataCase, async: true
 
   import HoloChat.AccountsFixtures
+  import HoloChat.CharactersFixtures
   import HoloChat.ChatFixtures
 
   alias HoloChat.Chat
@@ -224,6 +225,19 @@ defmodule HoloChat.ChatTest do
       message_fixture(scope, room)
       assert Chat.room_used?(room)
       assert Chat.room_used?("lobby")
+    end
+  end
+
+  describe "create_character_message/4" do
+    test "stores and broadcasts a message written by a cast character",
+         %{scope: scope, room: room} do
+      %{id: id} = character_fixture(scope, %{"name" => "Luna"})
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{from_assistant: true, character_id: ^id, username: "Luna"}} =
+               Chat.create_character_message(room, "Luna", "Hello.", id)
+
+      assert_receive {:new_message, %Message{character_id: ^id, body: "Hello."}}
     end
   end
 end

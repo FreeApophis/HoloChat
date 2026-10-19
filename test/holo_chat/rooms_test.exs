@@ -210,5 +210,53 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "reply settings" do
+    test "default to natural turns after four seconds, two AI turns in a row" do
+      room = roleplay_room_fixture(user_scope_fixture())
+      assert %Room{reply_policy: "natural", reply_delay: 4, max_ai_turns: 2} = room
+    end
+
+    test "are validated" do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+
+      assert {:error, changeset} =
+               Rooms.update_room(gm, room, %{
+                 "reply_policy" => "chaos",
+                 "reply_delay" => "99",
+                 "max_ai_turns" => "0"
+               })
+
+      assert %{reply_policy: [_], reply_delay: [_], max_ai_turns: [_]} = errors_on(changeset)
+    end
+  end
+
+  describe "list_staged_scenes/0 and subscribe_scenes/0" do
+    test "list role-play rooms that have a cast, with their cast" do
+      gm = user_scope_fixture()
+      empty = roleplay_room_fixture(gm)
+      staged = roleplay_room_fixture(gm)
+      character = character_fixture(gm)
+      {:ok, _} = Rooms.cast_character(gm, staged, character.id)
+
+      scenes = Map.new(Rooms.list_staged_scenes(), fn {room, cast} -> {room.id, cast} end)
+
+      assert [%{id: id}] = scenes[staged.id]
+      assert id == character.id
+      refute Map.has_key?(scenes, empty.id)
+    end
+
+    test "announce changes of any scene" do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+      Rooms.subscribe_scenes()
+
+      {:ok, _} = Rooms.update_room(gm, room, %{"topic" => "Changed"})
+
+      assert_receive {:scene_changed, name}
+      assert name == room.name
+    end
+  end
+
   defp read_image(id), do: StbImage.read_binary(Avatars.get_avatar(id).data)
 end

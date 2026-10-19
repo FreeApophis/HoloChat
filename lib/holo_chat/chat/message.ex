@@ -11,6 +11,8 @@ defmodule HoloChat.Chat.Message do
     field :from_assistant, :boolean, default: false
     # A plain id: Chat must not depend on the Assistant context.
     field :persona_id, :id
+    # Likewise a plain id: Chat must not depend on Characters.
+    field :character_id, :id
     belongs_to :user, HoloChat.Accounts.User
 
     timestamps(type: :utc_datetime_usec)

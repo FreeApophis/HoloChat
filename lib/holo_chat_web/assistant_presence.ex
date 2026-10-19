@@ -1,7 +1,8 @@
 defmodule HoloChatWeb.AssistantPresence do
   @moduledoc """
-  Shows the assistant personas in room presence: online while they are in
-  the room and enabled, and typing while they generate a reply. Driven by the
+  Shows the assistant personas and cast characters in room presence: online
+  while they are in the room and enabled, and typing while they generate a
+  reply. Driven by the
   assistant's status events, so the core never has to know about web-layer
   presence.
   """
@@ -34,6 +35,7 @@ defmodule HoloChatWeb.AssistantPresence do
       typing: status.typing,
       avatar_id: status.avatar_id,
       persona_id: status.persona_id,
+      character_id: status[:character_id],
       assistant: true
     }
 

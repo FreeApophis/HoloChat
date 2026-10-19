@@ -34,6 +34,39 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
           </p>
           <.input field={@form[:scenario]} type="textarea" label="Scenario" rows="8" />
 
+          <fieldset id="reply-settings" class="mb-4 rounded-xl border border-base-300 p-4">
+            <legend class="px-1 text-sm font-semibold">How the cast takes turns</legend>
+            <.input
+              field={@form[:reply_policy]}
+              type="select"
+              label="Turns"
+              options={[
+                {"Natural: named characters answer, otherwise one of the cast", "natural"},
+                {"Only when named: characters answer only when addressed", "mention"}
+              ]}
+            />
+            <div class="grid gap-4 sm:grid-cols-2">
+              <.input
+                field={@form[:reply_delay]}
+                type="number"
+                label="Wait for quiet (seconds)"
+                min="0"
+                max="60"
+              />
+              <.input
+                field={@form[:max_ai_turns]}
+                type="number"
+                label="AI turns in a row"
+                min="1"
+                max="5"
+              />
+            </div>
+            <p class="text-xs opacity-60">
+              Characters wait until the players have been quiet this long. A character who
+              names another lets that one answer, up to the number of AI turns in a row.
+            </p>
+          </fieldset>
+
           <div class="mb-4 grid gap-4 sm:grid-cols-2">
             <.image_upload
               upload={@uploads.card_image}

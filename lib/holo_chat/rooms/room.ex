@@ -14,6 +14,9 @@ defmodule HoloChat.Rooms.Room do
     field :scenario, :string
     field :tags, {:array, :string}, default: []
     field :tag_list, :string, virtual: true
+    field :reply_policy, :string, default: "natural"
+    field :reply_delay, :integer, default: 4
+    field :max_ai_turns, :integer, default: 2
     field :card_image_id, :binary_id
     field :background_image_id, :binary_id
 
@@ -37,12 +40,15 @@ defmodule HoloChat.Rooms.Room do
   """
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:title, :topic, :scenario])
+    |> cast(attrs, [:title, :topic, :scenario, :reply_policy, :reply_delay, :max_ai_turns])
     |> Tags.cast_tag_list(attrs)
     |> update_change(:title, &String.trim/1)
     |> validate_required([:title])
     |> validate_length(:title, max: 60)
     |> validate_length(:topic, max: 160)
     |> validate_length(:scenario, max: 4000)
+    |> validate_inclusion(:reply_policy, ~w(natural mention))
+    |> validate_number(:reply_delay, greater_than_or_equal_to: 0, less_than_or_equal_to: 60)
+    |> validate_number(:max_ai_turns, greater_than_or_equal_to: 1, less_than_or_equal_to: 5)
   end
 end

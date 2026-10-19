@@ -52,8 +52,8 @@ HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Cha
 │                      (the shared character library; tags match characters to scenes)
 ├── HoloChat.Rooms     sub-boundary; deps: Repo, Accounts, Avatars, Characters, Chat; exports Room
 │                      (role-play rooms: game masters, scene and cast; chat rooms need no record)
-└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Chat; exports Settings, Persona,
-                       LLM, Server
+└── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Characters, Chat, Rooms;
+                       exports Settings, Persona, LLM, Server (personas, and the cast in scenes)
 ```
 
 Rules:

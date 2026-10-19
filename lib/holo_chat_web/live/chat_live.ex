@@ -177,8 +177,10 @@ defmodule HoloChatWeb.ChatLive do
                     phx-click="show_profile"
                     phx-value-user-id={person.user_id}
                     phx-value-persona-id={person.persona_id}
+                    phx-value-character-id={person.character_id}
                     data-user-id={person.user_id}
                     data-persona-id={person.persona_id}
+                    data-character-id={person.character_id}
                     title={person.name}
                     class="rounded-full ring-2 ring-base-100 transition hover:z-10 hover:scale-110"
                   >
@@ -265,12 +267,13 @@ defmodule HoloChatWeb.ChatLive do
                 id={id}
                 class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
               >
-                <% author = author(message, @personas) %>
+                <% author = author(message, @personas, @characters) %>
                 <button
                   type="button"
                   phx-click={author.profile? && "show_profile"}
                   phx-value-user-id={message.user_id}
                   phx-value-persona-id={message.persona_id}
+                  phx-value-character-id={message.character_id}
                   class={["h-fit shrink-0 rounded-full", author.profile? && "cursor-pointer"]}
                   aria-label={"Profile of #{author.name}"}
                 >
@@ -289,9 +292,10 @@ defmodule HoloChatWeb.ChatLive do
                       phx-click={author.profile? && "show_profile"}
                       phx-value-user-id={message.user_id}
                       phx-value-persona-id={message.persona_id}
+                      phx-value-character-id={message.character_id}
                       class={["text-sm font-semibold", author.profile? && "hover:underline"]}
                     >
-                      {message.username}
+                      {author.name}
                     </button>
 
                     <span
@@ -496,6 +500,7 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(:me, presence_meta(socket.assigns.current_scope))
      |> assign(:profile, nil)
      |> assign_personas()
+     |> assign(:characters, %{})
      |> assign(:typing_timer, nil)
      |> assign(:unread, MapSet.new())
      |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
@@ -567,6 +572,7 @@ defmodule HoloChatWeb.ChatLive do
     {messages, more?} = Chat.list_messages_page(socket.assigns.room, nil, @page_size)
 
     socket
+    |> remember_characters(messages)
     |> assign(oldest_message: List.first(messages), more_messages?: more?)
     |> assign(:has_messages?, messages != [])
     |> stream(:messages, messages, reset: true)
@@ -614,6 +620,7 @@ defmodule HoloChatWeb.ChatLive do
 
     {:noreply,
      socket
+     |> remember_characters(older)
      |> assign(oldest_message: List.first(older) || oldest, more_messages?: more?)
      # Inserting newest-first at index 0 leaves them in chronological order.
      |> stream(:messages, Enum.reverse(older), at: 0)}
@@ -651,7 +658,11 @@ defmodule HoloChatWeb.ChatLive do
 
   @impl true
   def handle_info({:new_message, %{room: room} = message}, %{assigns: %{room: room}} = socket) do
-    {:noreply, socket |> assign(:has_messages?, true) |> stream_insert(:messages, message)}
+    {:noreply,
+     socket
+     |> remember_characters([message])
+     |> assign(:has_messages?, true)
+     |> stream_insert(:messages, message)}
   end
 
   # Still in flight from a room we just left.
@@ -740,6 +751,7 @@ defmodule HoloChatWeb.ChatLive do
           avatar_id: meta[:avatar_id],
           user_id: meta[:user_id],
           persona_id: meta[:persona_id],
+          character_id: meta[:character_id],
           assistant: meta[:assistant] == true
         }
       end
@@ -824,18 +836,50 @@ defmodule HoloChatWeb.ChatLive do
     assign(socket, :personas, Map.new(Assistant.list_personas(), &{&1.id, &1}))
   end
 
+  # Loads the cast characters that wrote `messages` and aren't known yet,
+  # so their messages show the current name and avatar.
+  defp remember_characters(socket, messages) do
+    known = socket.assigns.characters
+
+    missing =
+      for %{character_id: id} <- messages,
+          is_integer(id),
+          not Map.has_key?(known, id),
+          uniq: true do
+        id
+      end
+
+    case missing do
+      [] ->
+        socket
+
+      ids ->
+        loaded = Map.new(Characters.list_characters_by_ids(ids), &{&1.id, &1})
+        assign(socket, :characters, Map.merge(known, loaded))
+    end
+  end
+
   # Who wrote a message, as shown now: people by their current profile,
-  # personas by their current avatar. Legacy messages have no profile.
-  defp author(%{persona_id: id} = message, personas) when is_integer(id) do
+  # personas by their current avatar, characters by their current sheet.
+  # Legacy messages and deleted characters have no profile.
+  defp author(%{character_id: id} = message, _personas, characters) when is_integer(id) do
+    case characters[id] do
+      nil -> %{name: message.username, avatar_id: nil, profile?: false}
+      character -> %{name: character.name, avatar_id: character.avatar_id, profile?: true}
+    end
+  end
+
+  defp author(%{persona_id: id} = message, personas, _characters) when is_integer(id) do
     persona = personas[id]
     %{name: message.username, avatar_id: persona && persona.avatar_id, profile?: persona != nil}
   end
 
-  defp author(%{user: %{avatar_id: avatar_id}} = message, _personas) do
+  defp author(%{user: %{avatar_id: avatar_id}} = message, _personas, _characters) do
     %{name: message.username, avatar_id: avatar_id, profile?: true}
   end
 
-  defp author(message, _personas), do: %{name: message.username, avatar_id: nil, profile?: false}
+  defp author(message, _personas, _characters),
+    do: %{name: message.username, avatar_id: nil, profile?: false}
 
   defp typing_text([name]), do: "#{name} is typing…"
   defp typing_text([a, b]), do: "#{a} and #{b} are typing…"
