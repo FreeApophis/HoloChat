@@ -123,7 +123,7 @@ defmodule HoloChatWeb.ChatRoomsTest do
     view
     |> render()
     |> LazyHTML.from_fragment()
-    |> LazyHTML.query("#room-list a[id^='room-link-']")
+    |> LazyHTML.query("#room-list [id^='room-link-']")
     |> LazyHTML.attribute("id")
   end
 end

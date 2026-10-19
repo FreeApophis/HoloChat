@@ -9,73 +9,201 @@ defmodule HoloChatWeb.ChatLive do
   @typing_timeout :timer.seconds(3)
   @max_avatars 5
   @room_list_size 20
+  @max_restored_tabs 20
   @page_size 50
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex min-h-0 flex-1 gap-4">
-        <aside
-          id="room-list"
-          class="hidden w-56 shrink-0 flex-col overflow-y-auto rounded-2xl border border-base-300 bg-base-100 p-2 shadow-sm md:flex"
-          aria-label="Rooms"
-        >
-          <.link
-            id="roleplay-link"
-            navigate={~p"/roleplay"}
-            class="mb-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 px-2 py-1.5 text-sm font-medium text-violet-600 transition hover:from-violet-500/20 hover:to-fuchsia-500/20"
+      <div class="flex min-h-0 flex-1 flex-col">
+        <div class="relative z-10 -mb-px flex items-end gap-1 pl-2">
+          <nav
+            id="room-tabs"
+            phx-hook=".RoomTabs"
+            class="flex min-w-0 items-end gap-1 overflow-x-auto [scrollbar-width:none]"
+            aria-label="Open rooms"
           >
-            <.icon name="hero-sparkles" class="size-4 shrink-0" /> Role-play scenes
-          </.link>
-
-          <h2 class="px-2 pt-1 pb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-            Rooms
-          </h2>
-
-          <.link
-            :for={room <- room_list(@active_rooms, @room_counts, @room, @unread)}
-            id={"room-link-#{room.name}"}
-            patch={room_path(room.name)}
-            aria-current={room.current? && "page"}
-            data-kind={if(MapSet.member?(@roleplay_rooms, room.name), do: "roleplay", else: "chat")}
-            class={[
-              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
-              if(room.current?,
-                do: "bg-primary/10 font-semibold text-primary",
-                else: "hover:bg-base-200"
-              )
-            ]}
-          >
-            <.icon
-              name={
-                if(MapSet.member?(@roleplay_rooms, room.name),
-                  do: "hero-sparkles",
-                  else: "hero-hashtag"
+            <div
+              :for={tab <- room_tabs(@open_rooms, @room_counts, @room, @unread)}
+              id={"room-tab-#{tab.name}"}
+              data-kind={room_kind(@roleplay_rooms, tab.name)}
+              class={[
+                "group flex shrink-0 items-center rounded-t-xl border border-b-0 text-sm transition-colors",
+                if(tab.current?,
+                  do: "border-base-300 bg-base-100 font-semibold",
+                  else: "border-transparent opacity-70 hover:bg-base-200 hover:opacity-100"
                 )
-              }
-              class="size-3.5 shrink-0 opacity-50"
-            />
-            <span class={["min-w-0 flex-1 truncate", room.unread? && "font-semibold"]}>
-              {room.name}
-            </span>
-
-            <span
-              :if={room.unread?}
-              id={"room-unread-#{room.name}"}
-              class="size-2 shrink-0 rounded-full bg-primary"
-              aria-label="New messages"
-            ></span>
-            <span
-              :if={room.online > 0}
-              id={"room-online-#{room.name}"}
-              class="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-xs font-medium text-emerald-600"
-              title={"#{room.online} online"}
+              ]}
             >
-              {room.online}
-            </span>
-          </.link>
-        </aside>
+              <.link
+                patch={room_path(tab.name)}
+                aria-current={tab.current? && "page"}
+                class="flex items-center gap-1.5 py-2 pr-2 pl-3"
+              >
+                <.icon
+                  name={room_icon(@roleplay_rooms, tab.name)}
+                  class={[
+                    "size-3.5 shrink-0",
+                    if(room_kind(@roleplay_rooms, tab.name) == "roleplay",
+                      do: "text-violet-500",
+                      else: "opacity-50"
+                    )
+                  ]}
+                />
+                <span class={["max-w-36 truncate", tab.unread? && "font-semibold"]}>
+                  {tab.name}
+                </span>
+                <span
+                  :if={tab.unread?}
+                  id={"tab-unread-#{tab.name}"}
+                  class="size-2 shrink-0 rounded-full bg-primary"
+                  aria-label="New messages"
+                ></span>
+                <span
+                  :if={tab.online > 0}
+                  id={"tab-online-#{tab.name}"}
+                  class="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-xs font-medium text-emerald-600"
+                  title={"#{tab.online} online"}
+                >
+                  {tab.online}
+                </span>
+              </.link>
+              <button
+                :if={tab.closable?}
+                id={"close-tab-#{tab.name}"}
+                type="button"
+                phx-click="close_tab"
+                phx-value-room={tab.name}
+                class={[
+                  "mr-1.5 rounded-md p-0.5 opacity-40 transition hover:bg-base-300 hover:opacity-100",
+                  !tab.current? && "sm:opacity-0 sm:group-hover:opacity-40"
+                ]}
+                aria-label={"Close #{tab.name}"}
+                title="Close tab"
+              >
+                <.icon name="hero-x-mark" class="size-3.5" />
+              </button>
+            </div>
+          </nav>
+          <script :type={Phoenix.LiveView.ColocatedHook} name=".RoomTabs">
+            // The open tabs live in the server process; the browser remembers
+            // them across reloads and visits to other pages.
+            const KEY = "holochat:tabs"
+            export default {
+              mounted() {
+                let rooms = []
+                try { rooms = JSON.parse(localStorage.getItem(KEY)) || [] } catch (_e) {}
+                if (Array.isArray(rooms) && rooms.length > 0) {
+                  this.pushEventTo(this.el, "restore_tabs", {rooms})
+                }
+                this.handleEvent("chat:tabs", ({rooms}) => {
+                  try { localStorage.setItem(KEY, JSON.stringify(rooms)) } catch (_e) {}
+                })
+              },
+              updated() {
+                const current = this.el.querySelector("[aria-current='page']")
+                if (current) current.scrollIntoView({block: "nearest", inline: "nearest"})
+              }
+            }
+          </script>
+
+          <div class="relative mb-1 shrink-0">
+            <button
+              id="room-browser-toggle"
+              type="button"
+              phx-click={JS.toggle(to: "#room-browser")}
+              class="flex items-center rounded-lg p-1.5 opacity-70 transition hover:bg-base-200 hover:opacity-100"
+              aria-label="Open a room"
+              title="Open a room"
+            >
+              <.icon name="hero-plus" class="size-4" />
+            </button>
+
+            <div
+              id="room-browser"
+              phx-click-away={JS.hide(to: "#room-browser")}
+              phx-window-keydown={JS.hide(to: "#room-browser")}
+              phx-key="Escape"
+              class="absolute top-full right-0 z-30 mt-1 hidden w-64 rounded-2xl border border-base-300 bg-base-100 p-2 shadow-xl sm:right-auto sm:left-0"
+            >
+              <.form
+                for={@room_form}
+                id="room-form"
+                phx-submit={JS.push("switch_room") |> JS.hide(to: "#room-browser")}
+                class="flex items-center gap-1 p-1"
+              >
+                <input
+                  type="text"
+                  name={@room_form[:name].name}
+                  value={@room_form[:name].value}
+                  placeholder="Join a room…"
+                  aria-label="Room name"
+                  autocomplete="off"
+                  class="min-w-0 flex-1 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+                <button
+                  type="submit"
+                  class="rounded-lg p-1.5 text-sm transition hover:bg-base-200"
+                  aria-label="Join room"
+                >
+                  <.icon name="hero-arrow-right" class="size-4" />
+                </button>
+              </.form>
+
+              <h2 class="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide opacity-60">
+                Active rooms
+              </h2>
+              <div id="room-list" class="max-h-72 overflow-y-auto" aria-label="Rooms">
+                <button
+                  :for={room <- room_list(@active_rooms, @room_counts, @room, @unread)}
+                  id={"room-link-#{room.name}"}
+                  type="button"
+                  phx-click={JS.hide(to: "#room-browser") |> JS.patch(room_path(room.name))}
+                  aria-current={room.current? && "page"}
+                  data-kind={room_kind(@roleplay_rooms, room.name)}
+                  class={[
+                    "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+                    if(room.current?,
+                      do: "bg-primary/10 font-semibold text-primary",
+                      else: "hover:bg-base-200"
+                    )
+                  ]}
+                >
+                  <.icon
+                    name={room_icon(@roleplay_rooms, room.name)}
+                    class="size-3.5 shrink-0 opacity-50"
+                  />
+                  <span class={["min-w-0 flex-1 truncate", room.unread? && "font-semibold"]}>
+                    {room.name}
+                  </span>
+                  <span
+                    :if={room.unread?}
+                    id={"room-unread-#{room.name}"}
+                    class="size-2 shrink-0 rounded-full bg-primary"
+                    aria-label="New messages"
+                  ></span>
+                  <span
+                    :if={room.online > 0}
+                    id={"room-online-#{room.name}"}
+                    class="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-xs font-medium text-emerald-600"
+                    title={"#{room.online} online"}
+                  >
+                    {room.online}
+                  </span>
+                </button>
+              </div>
+
+              <.link
+                id="roleplay-link"
+                navigate={~p"/roleplay"}
+                class="mt-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 px-2 py-1.5 text-sm font-medium text-violet-600 transition hover:from-violet-500/20 hover:to-fuchsia-500/20"
+              >
+                <.icon name="hero-sparkles" class="size-4 shrink-0" /> Role-play scenes
+              </.link>
+            </div>
+          </div>
+        </div>
 
         <div class="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
           <%!-- Behind all content: -z-10 inside the isolated stacking context --%>
@@ -200,30 +328,6 @@ defmodule HoloChatWeb.ChatLive do
                 </span>
               </div>
             </div>
-
-            <.form
-              for={@room_form}
-              id="room-form"
-              phx-submit="switch_room"
-              class="flex items-center gap-2"
-            >
-              <input
-                type="text"
-                name={@room_form[:name].name}
-                value={@room_form[:name].value}
-                placeholder="Join a room…"
-                aria-label="Room name"
-                autocomplete="off"
-                class="w-40 rounded-lg border border-base-300 bg-base-200 px-3 py-1.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-              />
-              <button
-                type="submit"
-                class="rounded-lg px-2 py-1.5 text-sm transition hover:bg-base-200"
-                aria-label="Join room"
-              >
-                <.icon name="hero-arrow-right" class="size-4" />
-              </button>
-            </.form>
           </div>
 
           <div
@@ -509,6 +613,7 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(:characters, %{})
      |> assign(:typing_timer, nil)
      |> assign(:unread, MapSet.new())
+     |> assign(:open_rooms, [@default_room])
      |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
      |> assign(:room_counts, Presence.room_counts())}
   end
@@ -567,6 +672,7 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:show_scenario?, false)
     |> assign(:me, me)
     |> update(:unread, &MapSet.delete(&1, room))
+    |> open_tab(room)
     |> assign(:room_counts, Presence.room_counts())
     |> assign_presence()
     |> assign_message_form(%{})
@@ -651,6 +757,33 @@ defmodule HoloChatWeb.ChatLive do
 
   def handle_event("close_profile", _params, socket),
     do: {:noreply, assign(socket, :profile, nil)}
+
+  def handle_event("close_tab", %{"room" => @default_room}, socket), do: {:noreply, socket}
+
+  def handle_event("close_tab", %{"room" => room}, socket) do
+    %{open_rooms: open_rooms, room: current} = socket.assigns
+    remaining = List.delete(open_rooms, room)
+    socket = socket |> assign(:open_rooms, remaining) |> push_tabs()
+
+    if room == current do
+      # The lobby is never closed, so there always is a tab to the left.
+      left = Enum.at(open_rooms, Enum.find_index(open_rooms, &(&1 == room)) - 1)
+      {:noreply, push_patch(socket, to: room_path(left))}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # Sent by the RoomTabs hook with the tabs this browser had open before.
+  def handle_event("restore_tabs", %{"rooms" => rooms}, socket) when is_list(rooms) do
+    restored =
+      rooms
+      |> Enum.filter(&(is_binary(&1) and Chat.valid_room?(&1)))
+      |> Enum.take(@max_restored_tabs)
+
+    open_rooms = Enum.uniq([@default_room | restored] ++ socket.assigns.open_rooms)
+    {:noreply, socket |> assign(:open_rooms, open_rooms) |> push_tabs()}
+  end
 
   def handle_event("switch_room", %{"room" => %{"name" => name}}, socket) do
     room = normalize_room(name)
@@ -899,6 +1032,34 @@ defmodule HoloChatWeb.ChatLive do
     changeset = Chat.change_message(%Message{room: socket.assigns.room}, params)
     assign(socket, :form, to_form(changeset))
   end
+
+  defp open_tab(socket, room) do
+    if room in socket.assigns.open_rooms do
+      socket
+    else
+      socket |> update(:open_rooms, &(&1 ++ [room])) |> push_tabs()
+    end
+  end
+
+  defp push_tabs(socket), do: push_event(socket, "chat:tabs", %{rooms: socket.assigns.open_rooms})
+
+  defp room_tabs(open_rooms, room_counts, current, unread) do
+    Enum.map(open_rooms, fn name ->
+      %{
+        name: name,
+        online: Map.get(room_counts, name, 0),
+        unread?: MapSet.member?(unread, name),
+        current?: name == current,
+        closable?: name != @default_room
+      }
+    end)
+  end
+
+  defp room_kind(roleplay_rooms, name),
+    do: if(MapSet.member?(roleplay_rooms, name), do: "roleplay", else: "chat")
+
+  defp room_icon(roleplay_rooms, name),
+    do: if(MapSet.member?(roleplay_rooms, name), do: "hero-sparkles", else: "hero-hashtag")
 
   # Lobby first, then rooms by latest message, then rooms that only have
   # people in them, and finally the current room if it is none of those.
