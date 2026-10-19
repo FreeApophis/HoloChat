@@ -193,14 +193,6 @@ defmodule HoloChatWeb.ChatLive do
                   </span>
                 </button>
               </div>
-
-              <.link
-                id="roleplay-link"
-                navigate={~p"/roleplay"}
-                class="mt-2 flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 px-2 py-1.5 text-sm font-medium text-violet-600 transition hover:from-violet-500/20 hover:to-fuchsia-500/20"
-              >
-                <.icon name="hero-sparkles" class="size-4 shrink-0" /> Role-play scenes
-              </.link>
             </div>
           </div>
         </div>

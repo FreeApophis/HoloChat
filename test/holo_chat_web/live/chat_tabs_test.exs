@@ -49,6 +49,13 @@ defmodule HoloChatWeb.ChatTabsTest do
     assert tab_ids(view) == ["room-tab-lobby", "room-tab-#{room}"]
   end
 
+  test "the room browser offers only rooms", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/rooms/lobby")
+
+    assert has_element?(view, "#room-browser #room-list")
+    refute has_element?(view, "#room-browser a[href='/roleplay']")
+  end
+
   test "the lobby tab cannot be closed", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/rooms/#{unique_room()}")
 
