@@ -170,5 +170,6 @@ Also:
 
 ## Git
 
-- Small, focused commits with an imperative subject line. Commit only when asked.
+- Small, focused commits with an imperative subject line. Commit each feature as soon as it is
+  done (tests and code together), without being asked. Never push unless asked.
 - `mix precommit` must pass before every commit.
