@@ -67,11 +67,9 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(view, "#current-scenario", "Moonlit Market")
       assert has_element?(view, "#start-scene-form")
 
+      # The library stays an overview of scenarios and the rooms playing them.
       {:ok, library, _html} = live(conn, ~p"/scenarios")
-      assert has_element?(library, "#waiting-scene-#{id}[href='/scenes/#{id}/settings']")
-
-      {:ok, guest_library, _html} = live(build_conn_with_unique_ip(), ~p"/scenarios")
-      refute has_element?(guest_library, "#waiting-scene-#{id}")
+      refute has_element?(library, "#waiting-scenes")
     end
 
     test "starts a waiting scene in a new channel", %{conn: conn, scenario: scenario} do
@@ -89,7 +87,6 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(view, "#scene-settings-link")
 
       {:ok, library, _html} = live(conn, ~p"/scenarios")
-      refute has_element?(library, "#waiting-scene-#{id}")
       assert has_element?(library, "#scenario-#{scenario.id} #scene-room-#{name}")
     end
 

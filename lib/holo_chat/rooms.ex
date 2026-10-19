@@ -113,23 +113,6 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Returns the scenes the scope's user masters that wait for a channel, with
-  their scenario, newest first.
-  """
-  def list_waiting_scenes(%Scope{user: %User{id: user_id}}) do
-    Repo.all(
-      from r in Room,
-        join: gm in GameMaster,
-        on: gm.room_id == r.id,
-        where: gm.user_id == ^user_id and is_nil(r.name),
-        order_by: [desc: r.inserted_at, desc: r.id],
-        preload: :scenario
-    )
-  end
-
-  def list_waiting_scenes(_scope), do: []
-
-  @doc """
   Creates a scene with the scope's user as its game master, playing the
   scenario `"scenario_id"` with its suggested cast.
 

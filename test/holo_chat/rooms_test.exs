@@ -106,20 +106,6 @@ defmodule HoloChat.RoomsTest do
       refute Enum.any?(Rooms.list_staged_scenes(), fn {room, _cast} -> room.id == scene.id end)
     end
 
-    test "list_waiting_scenes/1 returns the scope's waiting scenes with their scenario",
-         %{gm: gm, scene: scene} do
-      started = roleplay_room_fixture(gm)
-
-      waiting = Rooms.list_waiting_scenes(gm)
-
-      assert [%Room{scenario: %Scenario{title: "Risa"}}] =
-               Enum.filter(waiting, &(&1.id == scene.id))
-
-      refute Enum.any?(waiting, &(&1.id == started.id))
-      assert Rooms.list_waiting_scenes(user_scope_fixture()) == []
-      assert Rooms.list_waiting_scenes(nil) == []
-    end
-
     test "get_scene/1 finds a scene by id with its scenario, or nil", %{scene: scene} do
       assert %Room{scenario: %Scenario{title: "Risa"}} = Rooms.get_scene(scene.id)
       assert Rooms.get_scene("#{scene.id}").id == scene.id
@@ -141,7 +127,6 @@ defmodule HoloChat.RoomsTest do
       assert_receive {:scene_changed, ^name}
       assert Rooms.get_room(name).id == scene.id
       assert name in Rooms.roleplay_room_names()
-      refute Enum.any?(Rooms.list_waiting_scenes(gm), &(&1.id == scene.id))
     end
 
     test "start_scene/3 refuses taken names, players and started scenes",
