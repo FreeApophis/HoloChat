@@ -22,10 +22,26 @@ defmodule HoloChatWeb.RoleplayLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/roleplay")
 
-      assert has_element?(view, "#room-card-#{room.name}", "The Sunken Keep")
-      assert has_element?(view, "#room-card-#{room.name}", "Water rises.")
-      assert has_element?(view, "#room-card-#{room.name} a[href='/rooms/#{room.name}']")
-      refute has_element?(view, "#room-card-#{chat_room}")
+      card = "#scenario-card-#{room.scenario_id}"
+      assert has_element?(view, card, "The Sunken Keep")
+      assert has_element?(view, card, "Water rises.")
+      assert has_element?(view, "#{card} a#scene-room-#{room.name}[href='/rooms/#{room.name}']")
+      refute has_element?(view, "#scene-room-#{chat_room}")
+    end
+
+    test "groups rooms playing the same scenario into one card", %{conn: conn} do
+      gm = user_scope_fixture()
+      first = roleplay_room_fixture(gm, %{"title" => "Twin Halls"})
+      second = roleplay_room_fixture(gm, %{"scenario_id" => first.scenario_id})
+      other = roleplay_room_fixture(gm)
+
+      {:ok, view, _html} = live(conn, ~p"/roleplay")
+
+      card = "#scenario-card-#{first.scenario_id}"
+      assert has_element?(view, "#{card} #scene-room-#{first.name}")
+      assert has_element?(view, "#{card} #scene-room-#{second.name}")
+      refute has_element?(view, "#{card} #scene-room-#{other.name}")
+      assert has_element?(view, "#scenario-card-#{other.scenario_id} #scene-room-#{other.name}")
     end
 
     test "shows the card image of the room's scenario", %{conn: conn} do
@@ -44,7 +60,7 @@ defmodule HoloChatWeb.RoleplayLiveTest do
 
       assert has_element?(
                view,
-               "#room-card-#{room.name} img[src='/avatars/#{scenario.card_image_id}']"
+               "#scenario-card-#{scenario.id} img[src='/avatars/#{scenario.card_image_id}']"
              )
     end
 

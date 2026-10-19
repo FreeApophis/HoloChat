@@ -122,7 +122,7 @@ defmodule HoloChatWeb.ScenarioChangeTest do
       assert has_element?(watcher, "#room-tab-#{name}[data-kind='chat']")
 
       {:ok, overview, _html} = live(build_conn_with_unique_ip(), ~p"/roleplay")
-      refute has_element?(overview, "#room-card-#{name}")
+      refute has_element?(overview, "#scene-room-#{name}")
     end
 
     test "game masters keep their settings and can start a new scenario",
