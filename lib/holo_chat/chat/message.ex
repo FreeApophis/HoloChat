@@ -9,7 +9,7 @@ defmodule HoloChat.Chat.Message do
     field :username, :string
     field :body, :string
     field :from_assistant, :boolean, default: false
-    # "chat", or "scenario" for the announcement of a scenario change.
+    # "chat"; "scenario" and "scenario_end" announce a scenario change.
     field :kind, :string, default: "chat"
     # A plain id: Chat must not depend on Scenarios.
     field :scenario_id, :id

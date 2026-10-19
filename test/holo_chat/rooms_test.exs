@@ -148,6 +148,71 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "end_scenario/2" do
+    setup do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+      character = character_fixture(gm)
+      {:ok, _} = Rooms.cast_character(gm, room, character.id)
+      %{gm: gm, room: room}
+    end
+
+    test "leaves a chat room with its game masters, announced in the chat",
+         %{gm: gm, room: room} do
+      Chat.subscribe(room.name)
+      Rooms.subscribe(room.name)
+
+      assert {:ok, %Room{scenario_id: nil, scenario: nil}} = Rooms.end_scenario(gm, room)
+
+      assert_receive {:new_message, %{kind: "scenario_end", scenario_id: nil}}
+      assert_receive {:room_updated, %Room{scenario_id: nil}}
+      ended = Rooms.get_room(room.name)
+      assert Rooms.list_cast(ended) == []
+      assert Rooms.game_master?(gm, ended)
+      refute room.name in Rooms.roleplay_room_names()
+      refute Enum.any?(Rooms.list_roleplay_rooms(), &(&1.id == room.id))
+    end
+
+    test "refuses players", %{room: room} do
+      assert {:error, :unauthorized} = Rooms.end_scenario(user_scope_fixture(), room)
+    end
+
+    test "a new scenario can follow", %{gm: gm, room: room} do
+      {:ok, room} = Rooms.end_scenario(gm, room)
+      scenario = scenario_fixture(gm)
+
+      assert {:ok, %Room{scenario_id: id}} = Rooms.switch_scenario(gm, room, scenario.id)
+      assert id == scenario.id
+      assert room.name in Rooms.roleplay_room_names()
+    end
+  end
+
+  describe "create_roleplay_room/2 for an existing chat room" do
+    test "is allowed for admins, but never for the lobby" do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+      admin = user_scope_fixture(admin)
+      scenario = scenario_fixture(admin)
+      chat_room = unique_room()
+      message_fixture(user_scope_fixture(), chat_room)
+
+      assert {:ok, room} =
+               Rooms.create_roleplay_room(admin, %{
+                 "name" => chat_room,
+                 "scenario_id" => scenario.id
+               })
+
+      assert Rooms.game_master?(admin, room)
+
+      assert {:error, changeset} =
+               Rooms.create_roleplay_room(admin, %{
+                 "name" => "lobby",
+                 "scenario_id" => scenario.id
+               })
+
+      assert %{name: ["is already taken"]} = errors_on(changeset)
+    end
+  end
+
   describe "update_room/3" do
     setup do
       gm = user_scope_fixture()

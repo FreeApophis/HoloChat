@@ -69,8 +69,9 @@ defmodule HoloChatWeb.RoleplayLive.New do
 
   @impl true
   def mount(params, _session, socket) do
-    # Coming from a scenario card preselects that scenario.
-    attrs = %{"scenario_id" => params["scenario"]}
+    # Coming from a scenario card preselects that scenario; an admin coming
+    # from a chat room fills in its name.
+    attrs = %{"scenario_id" => params["scenario"], "name" => params["room"]}
 
     {:ok,
      socket

@@ -65,9 +65,19 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
               />
             </div>
             <.button data-confirm="Switch scenarios? The cast is replaced, and the characters forget everything that happened so far.">
-              Switch
+              {if @room.scenario, do: "Switch", else: "Start"}
             </.button>
           </.form>
+          <button
+            :if={@room.scenario}
+            id="end-scenario"
+            type="button"
+            phx-click="end_scenario"
+            data-confirm="End the scenario? The cast leaves and the room becomes a plain chat room."
+            class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-error transition hover:bg-error/10"
+          >
+            <.icon name="hero-flag" class="size-4" /> End the scenario
+          </button>
           <p class="-mt-2 text-xs opacity-60">
             Switching announces the new scenario in the chat and casts its suggested characters.
             Browse the <.link navigate={~p"/scenarios"} class="font-medium text-primary">scenario library</.link>.
@@ -232,6 +242,21 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "That scenario no longer exists.")}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
+    end
+  end
+
+  def handle_event("end_scenario", _params, socket) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Rooms.end_scenario(scope, room) do
+      {:ok, room} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "The scenario has ended. ##{room.name} is a chat room now.")
+         |> assign_room(room)}
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}

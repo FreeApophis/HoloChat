@@ -260,6 +260,22 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "create_scenario_end_message/2" do
+    test "announces that the scenario has ended", %{scope: scope, room: room} do
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{kind: "scenario_end", scenario_id: nil} = message} =
+               Chat.create_scenario_end_message(scope, room)
+
+      assert message.user_id == scope.user.id
+      assert_receive {:new_message, %Message{kind: "scenario_end"}}
+    end
+
+    test "requires an account", %{room: room} do
+      assert {:error, :unauthorized} = Chat.create_scenario_end_message(nil, room)
+    end
+  end
+
   test "ordinary messages are chat messages", %{scope: scope, room: room} do
     assert %Message{kind: "chat", scenario_id: nil} = message_fixture(scope, room)
   end

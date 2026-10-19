@@ -210,7 +210,7 @@ defmodule HoloChatWeb.ChatLive do
           </div>
 
           <div
-            :if={@scene}
+            :if={@scenario}
             id="scene-header"
             class="border-b border-base-300/70 bg-base-100/40 px-4 py-3 backdrop-blur-sm"
           >
@@ -218,10 +218,10 @@ defmodule HoloChatWeb.ChatLive do
               <div class="min-w-0 flex-1">
                 <h2 id="scene-title" class="flex items-center gap-2 text-lg font-semibold">
                   <.icon name="hero-sparkles" class="size-5 text-violet-500" />
-                  <span class="truncate">{if @scenario, do: @scenario.title, else: @room}</span>
+                  <span class="truncate">{@scenario.title}</span>
                 </h2>
 
-                <p :if={@scenario && @scenario.topic} id="scene-topic" class="text-sm opacity-75">
+                <p :if={@scenario.topic} id="scene-topic" class="text-sm opacity-75">
                   {@scenario.topic}
                 </p>
                 <div
@@ -250,7 +250,7 @@ defmodule HoloChatWeb.ChatLive do
               </div>
 
               <button
-                :if={@scenario && @scenario.description}
+                :if={@scenario.description}
                 id="show-scenario"
                 type="button"
                 phx-click="toggle_scenario"
@@ -272,7 +272,7 @@ defmodule HoloChatWeb.ChatLive do
               </.link>
             </div>
             <.markdown
-              :if={@show_scenario? && @scenario && @scenario.description}
+              :if={@show_scenario? && @scenario.description}
               id="scenario"
               text={@scenario.description}
               class="mt-2 max-h-48 overflow-y-auto rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
@@ -320,6 +320,23 @@ defmodule HoloChatWeb.ChatLive do
                 </span>
               </div>
             </div>
+
+            <.link
+              :if={@scene && !@scenario && @can_manage_scene?}
+              id="room-settings-link"
+              navigate={~p"/rooms/#{@room}/settings"}
+              class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm opacity-70 transition hover:bg-base-200 hover:opacity-100"
+            >
+              <.icon name="hero-cog-6-tooth" class="size-4" /> Room settings
+            </.link>
+            <.link
+              :if={!@scene && @room != "lobby" && Accounts.admin?(@current_scope)}
+              id="start-scene-link"
+              navigate={~p"/roleplay/new?room=#{@room}"}
+              class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-violet-600 transition hover:bg-violet-500/10"
+            >
+              <.icon name="hero-sparkles" class="size-4" /> Start a scenario here
+            </.link>
           </div>
 
           <div
@@ -365,7 +382,19 @@ defmodule HoloChatWeb.ChatLive do
                   scenario={@scenarios[message.scenario_id]}
                 />
                 <div
-                  :if={message.kind != "scenario"}
+                  :if={message.kind == "scenario_end"}
+                  data-role="scenario-end"
+                  class="my-4 flex items-center gap-3 text-xs opacity-70"
+                >
+                  <span class="h-px flex-1 bg-base-300"></span>
+                  <span class="flex items-center gap-1.5 font-medium">
+                    <.icon name="hero-flag" class="size-4" />
+                    The scenario has ended · {message.username}
+                  </span>
+                  <span class="h-px flex-1 bg-base-300"></span>
+                </div>
+                <div
+                  :if={message.kind == "chat"}
                   class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
                 >
                   <% author = author(message, @personas, @characters) %>
@@ -865,7 +894,12 @@ defmodule HoloChatWeb.ChatLive do
   def handle_info({:new_message, _message}, socket), do: {:noreply, socket}
 
   def handle_info({:room_updated, %{name: room} = scene}, %{assigns: %{room: room}} = socket) do
-    {:noreply, assign_scene(socket, scene)}
+    roleplay_rooms =
+      if scene.scenario_id,
+        do: MapSet.put(socket.assigns.roleplay_rooms, room),
+        else: MapSet.delete(socket.assigns.roleplay_rooms, room)
+
+    {:noreply, socket |> assign(:roleplay_rooms, roleplay_rooms) |> assign_scene(scene)}
   end
 
   def handle_info({:room_updated, _scene}, socket), do: {:noreply, socket}

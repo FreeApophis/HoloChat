@@ -64,22 +64,22 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Returns all role-play rooms with their scenario, newest first.
+  Returns the rooms playing a scenario, with their scenario, newest first.
   """
   def list_roleplay_rooms do
     Room
-    |> where(kind: "roleplay")
+    |> where([r], not is_nil(r.scenario_id))
     |> order_by(desc: :inserted_at, desc: :id)
     |> preload(:scenario)
     |> Repo.all()
   end
 
   @doc """
-  Returns the names of all role-play rooms as a set.
+  Returns the names of the rooms playing a scenario as a set.
   """
   def roleplay_room_names do
     Room
-    |> where(kind: "roleplay")
+    |> where([r], not is_nil(r.scenario_id))
     |> select([r], r.name)
     |> Repo.all()
     |> MapSet.new()
@@ -97,13 +97,16 @@ defmodule HoloChat.Rooms do
   playing the scenario `"scenario_id"` with its suggested cast. The scenario
   is announced in the chat.
 
-  The name must be a valid room name that no chat or role-play room uses yet.
+  The name must be a valid room name that no room uses yet. Admins may turn
+  an existing chat room other than the lobby into a scene.
   """
   def create_roleplay_room(%Scope{user: %User{} = user} = scope, attrs) do
     changeset =
       %Room{kind: "roleplay"}
       |> Room.create_changeset(attrs)
-      |> Ecto.Changeset.validate_change(:name, &validate_new_name/2)
+      |> Ecto.Changeset.validate_change(:name, fn :name, name ->
+        validate_new_name(name, Accounts.admin?(scope))
+      end)
 
     Repo.transact(fn ->
       with {:ok, room} <- Repo.insert(changeset) do
@@ -118,12 +121,13 @@ defmodule HoloChat.Rooms do
 
   def create_roleplay_room(_scope, _attrs), do: {:error, :unauthorized}
 
-  defp validate_new_name(:name, name) do
+  # Names of existing role-play rooms are caught by the unique index.
+  defp validate_new_name(name, admin?) do
     cond do
       not Chat.valid_room?(name) ->
         [name: "may only contain lowercase letters, digits and dashes (up to 32)"]
 
-      Chat.room_used?(name) ->
+      name == "lobby" or (Chat.room_used?(name) and not admin?) ->
         [name: "is already taken"]
 
       true ->
@@ -175,6 +179,29 @@ defmodule HoloChat.Rooms do
         scenario -> room |> play(scenario) |> announce_scenario(scope)
       end
     end)
+  end
+
+  @doc """
+  Ends the room's scenario: the cast leaves and the room is a chat room
+  again, announced in the chat. Its game masters stay and can start another
+  scenario with `switch_scenario/3`.
+  """
+  def end_scenario(scope, %Room{} = room) do
+    authorize(scope, room, fn -> room |> stop_playing() |> announce_end(scope) end)
+  end
+
+  defp stop_playing(room) do
+    Repo.transact(fn ->
+      with {:ok, room} <- room |> Ecto.Changeset.change(scenario_id: nil) |> Repo.update() do
+        replace_cast(room, [])
+        {:ok, %{room | scenario: nil}}
+      end
+    end)
+  end
+
+  defp announce_end({:ok, room}, scope) do
+    {:ok, _message} = Chat.create_scenario_end_message(scope, room.name)
+    broadcast_update({:ok, room})
   end
 
   defp play(room, scenario) do

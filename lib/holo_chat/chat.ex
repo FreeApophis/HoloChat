@@ -135,15 +135,30 @@ defmodule HoloChat.Chat do
   scope's user. The `title` is the message body, for clients that don't
   look the scenario up.
   """
-  def create_scenario_message(%Scope{user: %User{} = user}, room, scenario_id, title) do
+  def create_scenario_message(%Scope{user: %User{}} = scope, room, scenario_id, title) do
+    create_announcement(scope, room, "scenario", scenario_id, title)
+  end
+
+  def create_scenario_message(_scope, _room, _scenario_id, _title), do: {:error, :unauthorized}
+
+  @doc """
+  Announces in `room` that its scenario has ended, as the scope's user.
+  """
+  def create_scenario_end_message(%Scope{user: %User{}} = scope, room) do
+    create_announcement(scope, room, "scenario_end", nil, "The scenario has ended.")
+  end
+
+  def create_scenario_end_message(_scope, _room), do: {:error, :unauthorized}
+
+  defp create_announcement(%Scope{user: user}, room, kind, scenario_id, body) do
     %Message{
       room: room,
       user_id: user.id,
       username: user.username,
-      kind: "scenario",
+      kind: kind,
       scenario_id: scenario_id
     }
-    |> Message.changeset(%{body: title})
+    |> Message.changeset(%{body: body})
     |> Repo.insert()
     |> case do
       {:ok, message} ->
@@ -155,8 +170,6 @@ defmodule HoloChat.Chat do
         error
     end
   end
-
-  def create_scenario_message(_scope, _room, _scenario_id, _title), do: {:error, :unauthorized}
 
   defp broadcast_new_message(%Message{room: room} = message) do
     Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
