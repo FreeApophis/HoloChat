@@ -4,6 +4,7 @@ defmodule HoloChat.ChatTest do
   import HoloChat.AccountsFixtures
   import HoloChat.CharactersFixtures
   import HoloChat.ChatFixtures
+  import HoloChat.ScenariosFixtures
 
   alias HoloChat.Chat
   alias HoloChat.Chat.Message
@@ -239,5 +240,27 @@ defmodule HoloChat.ChatTest do
 
       assert_receive {:new_message, %Message{character_id: ^id, body: "Hello."}}
     end
+  end
+
+  describe "create_scenario_message/4" do
+    test "announces a scenario change in the room, by the scope's user",
+         %{scope: scope, room: room} do
+      %{id: id} = scenario_fixture(scope, %{"title" => "Risa"})
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{kind: "scenario", scenario_id: ^id, body: "Risa"} = message} =
+               Chat.create_scenario_message(scope, room, id, "Risa")
+
+      assert message.user_id == scope.user.id
+      assert_receive {:new_message, %Message{kind: "scenario", scenario_id: ^id}}
+    end
+
+    test "requires an account", %{room: room} do
+      assert {:error, :unauthorized} = Chat.create_scenario_message(nil, room, 1, "Risa")
+    end
+  end
+
+  test "ordinary messages are chat messages", %{scope: scope, room: room} do
+    assert %Message{kind: "chat", scenario_id: nil} = message_fixture(scope, room)
   end
 end

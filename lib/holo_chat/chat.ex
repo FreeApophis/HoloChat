@@ -130,6 +130,34 @@ defmodule HoloChat.Chat do
 
   def create_message(_scope, _room, _attrs), do: {:error, :unauthorized}
 
+  @doc """
+  Announces in `room` that it now plays the scenario `scenario_id`, as the
+  scope's user. The `title` is the message body, for clients that don't
+  look the scenario up.
+  """
+  def create_scenario_message(%Scope{user: %User{} = user}, room, scenario_id, title) do
+    %Message{
+      room: room,
+      user_id: user.id,
+      username: user.username,
+      kind: "scenario",
+      scenario_id: scenario_id
+    }
+    |> Message.changeset(%{body: title})
+    |> Repo.insert()
+    |> case do
+      {:ok, message} ->
+        message = Repo.preload(message, user: author_query())
+        broadcast_new_message(message)
+        {:ok, message}
+
+      error ->
+        error
+    end
+  end
+
+  def create_scenario_message(_scope, _room, _scenario_id, _title), do: {:error, :unauthorized}
+
   defp broadcast_new_message(%Message{room: room} = message) do
     Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
     Phoenix.PubSub.broadcast(@pubsub, @rooms_topic, {:room_activity, room, message.inserted_at})

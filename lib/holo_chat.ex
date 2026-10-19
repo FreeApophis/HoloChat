@@ -25,6 +25,8 @@ defmodule HoloChat do
       Characters.Character,
       Characters.Tags,
       Rooms,
-      Rooms.Room
+      Rooms.Room,
+      Scenarios,
+      Scenarios.Scenario
     ]
 end

@@ -3,9 +3,11 @@ defmodule HoloChat.Assistant.ScenePrompt do
   Builds the prompt for a cast character in a role-play scene, and turns
   the model's output into that character's message.
 
-  The system prompt holds the scene (title and scenario), the character's
+  The system prompt holds the scene (the room's scenario), the character's
   sheet and who else is present. Players appear by name only: their
-  profile descriptions are never sent to the model.
+  profile descriptions are never sent to the model. The history starts
+  after the latest scenario change: the cast doesn't remember earlier
+  scenarios.
   """
 
   alias HoloChat.Assistant
@@ -19,6 +21,8 @@ defmodule HoloChat.Assistant.ScenePrompt do
   alternating as strict chat templates require.
   """
   def build(room, character, cast, history) do
+    history = since_scenario_change(history)
+
     [
       %{role: "system", content: system_prompt(room, character, cast, history)}
       | turns(character, history)
@@ -33,7 +37,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
         "Write only #{name}'s next message: what #{name} says and does, in character. " <>
         "Put actions in *asterisks*. Never write lines or actions for anyone else, " <>
         "and don't narrate the scene. Keep it to one or two short paragraphs.",
-      section("Scene: #{room.title}", room.scenario),
+      scene(room.scenario),
       section(
         name,
         [
@@ -46,6 +50,16 @@ defmodule HoloChat.Assistant.ScenePrompt do
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n\n")
+  end
+
+  defp scene(nil), do: nil
+  defp scene(scenario), do: section("Scene: #{scenario.title}", scenario.description)
+
+  defp since_scenario_change(history) do
+    case Enum.find_index(Enum.reverse(history), &(&1.kind == "scenario")) do
+      nil -> history
+      from_end -> Enum.take(history, -from_end)
+    end
   end
 
   defp others(character, cast, history) do

@@ -149,6 +149,7 @@ defmodule HoloChat.Assistant.Server do
 
   defp enqueue_mentions(%{settings: %{enabled: false}} = state, _message), do: state
   defp enqueue_mentions(state, %{from_assistant: true}), do: state
+  defp enqueue_mentions(state, %{kind: "scenario"}), do: state
 
   defp enqueue_mentions(state, message) do
     state.personas
@@ -179,6 +180,12 @@ defmodule HoloChat.Assistant.Server do
     else
       _no_one -> state
     end
+  end
+
+  # A new scenario starts: turns owed to the old one are dropped.
+  defp scene_message(state, scene, %{kind: "scenario"}) do
+    if scene.timer, do: Process.cancel_timer(scene.timer)
+    put_scene(state, %{scene | timer: nil, pending: nil, streak: 0, last_speaker_id: nil})
   end
 
   # A player spoke: wait until the players have been quiet for the delay.

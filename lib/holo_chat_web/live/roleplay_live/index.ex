@@ -15,11 +15,19 @@ defmodule HoloChatWeb.RoleplayLive.Index do
               <.icon name="hero-sparkles" class="size-6 text-primary" /> Role-play
             </h1>
             <p class="mt-1 text-sm opacity-70">
-              Scenes run by their game masters. Step in and play a part, or browse the <.link
+              Scenes run by their game masters. Step in and play a part, or browse the
+              <.link
+                id="scenarios-link"
+                navigate={~p"/scenarios"}
+                class="font-medium text-primary hover:underline"
+              >
+                scenarios
+              </.link>
+              and <.link
                 navigate={~p"/characters"}
                 class="font-medium text-primary hover:underline"
               >
-                character library
+                characters
               </.link>.
             </p>
           </div>
@@ -48,16 +56,17 @@ defmodule HoloChatWeb.RoleplayLive.Index do
             id={"room-card-#{room.name}"}
             class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
           >
+            <% scenario = room.scenario %>
             <.link navigate={~p"/rooms/#{room.name}"} class="block">
               <div class="relative aspect-video overflow-hidden bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500">
                 <img
-                  :if={room.card_image_id}
-                  src={~p"/avatars/#{room.card_image_id}"}
+                  :if={scenario && scenario.card_image_id}
+                  src={~p"/avatars/#{scenario.card_image_id}"}
                   alt=""
                   class="size-full object-cover transition duration-500 group-hover:scale-105"
                 />
                 <.icon
-                  :if={!room.card_image_id}
+                  :if={!(scenario && scenario.card_image_id)}
                   name="hero-sparkles"
                   class="absolute inset-0 m-auto size-12 text-white/70"
                 />
@@ -70,9 +79,11 @@ defmodule HoloChatWeb.RoleplayLive.Index do
                 </span>
               </div>
               <div class="space-y-1 p-4">
-                <h2 class="truncate font-semibold">{room.title}</h2>
-                <p class="line-clamp-2 min-h-10 text-sm opacity-70">{room.topic}</p>
-                <.tags tags={room.tags} />
+                <h2 class="truncate font-semibold">
+                  {if scenario, do: scenario.title, else: room.name}
+                </h2>
+                <p class="line-clamp-2 min-h-10 text-sm opacity-70">{scenario && scenario.topic}</p>
+                <.tags tags={if(scenario, do: scenario.tags, else: [])} />
                 <p class="text-xs opacity-50">#{room.name}</p>
               </div>
             </.link>

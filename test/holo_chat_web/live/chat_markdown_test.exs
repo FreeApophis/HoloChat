@@ -70,7 +70,7 @@ defmodule HoloChatWeb.ChatMarkdownTest do
   end
 
   test "scenarios render Markdown", %{conn: conn} do
-    room = roleplay_room_fixture(user_scope_fixture(), %{"scenario" => "A **storm** rages."})
+    room = roleplay_room_fixture(user_scope_fixture(), %{"description" => "A **storm** rages."})
 
     {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}")
     view |> element("#show-scenario") |> render_click()

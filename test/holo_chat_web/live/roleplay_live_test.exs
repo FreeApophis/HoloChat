@@ -6,8 +6,9 @@ defmodule HoloChatWeb.RoleplayLiveTest do
   import HoloChat.AvatarFixtures
   import HoloChat.ChatFixtures
   import HoloChat.RoomsFixtures
+  import HoloChat.ScenariosFixtures
 
-  alias HoloChat.{Accounts, Rooms}
+  alias HoloChat.{Accounts, Rooms, Scenarios}
 
   describe "the role-play overview" do
     test "shows role-play rooms as cards, but not chat rooms", %{conn: conn} do
@@ -27,16 +28,23 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       refute has_element?(view, "#room-card-#{chat_room}")
     end
 
-    test "shows the card image", %{conn: conn} do
+    test "shows the card image of the room's scenario", %{conn: conn} do
       gm = user_scope_fixture()
       room = roleplay_room_fixture(gm)
-      {:ok, room} = Rooms.update_room_image(gm, room, :card, image_binary(32, 18, {1, 2, 3}))
+
+      {:ok, scenario} =
+        Scenarios.update_scenario_image(
+          gm,
+          Scenarios.get_scenario(room.scenario_id),
+          :card,
+          image_binary(32, 18, {1, 2, 3})
+        )
 
       {:ok, view, _html} = live(conn, ~p"/roleplay")
 
       assert has_element?(
                view,
-               "#room-card-#{room.name} img[src='/avatars/#{room.card_image_id}']"
+               "#room-card-#{room.name} img[src='/avatars/#{scenario.card_image_id}']"
              )
     end
 
@@ -49,7 +57,11 @@ defmodule HoloChatWeb.RoleplayLiveTest do
   describe "creating a role-play room" do
     setup :register_and_log_in_user
 
-    test "makes the creator its game master", %{conn: conn} do
+    setup %{user: user} do
+      %{scenario: scenario_fixture(user_scope_fixture(user), %{"title" => "Moonlit Market"})}
+    end
+
+    test "makes the creator its game master", %{conn: conn, scenario: scenario} do
       {:ok, view, _html} = live(conn, ~p"/roleplay")
       assert has_element?(view, "#new-room-link[href='/roleplay/new']")
       {:ok, view, _html} = live(conn, ~p"/roleplay/new")
@@ -57,23 +69,23 @@ defmodule HoloChatWeb.RoleplayLiveTest do
 
       {:ok, view, _html} =
         view
-        |> form("#room-form", room: %{name: name, title: "Moonlit Market", topic: "Bargains."})
+        |> form("#room-form", room: %{name: name, scenario_id: scenario.id})
         |> render_submit()
         |> follow_redirect(conn, ~p"/rooms/#{name}")
 
       assert has_element?(view, "#scene-title", "Moonlit Market")
-      assert has_element?(view, "#scene-topic", "Bargains.")
       assert has_element?(view, "#scene-settings-link")
     end
 
-    test "refuses a name already used by a chat room", %{conn: conn, user: user} do
+    test "refuses a name already used by a chat room",
+         %{conn: conn, user: user, scenario: scenario} do
       name = unique_room()
       message_fixture(user_scope_fixture(user), name)
       {:ok, view, _html} = live(conn, ~p"/roleplay/new")
 
       html =
         view
-        |> form("#room-form", room: %{name: name, title: "Taken"})
+        |> form("#room-form", room: %{name: name, scenario_id: scenario.id})
         |> render_submit()
 
       assert html =~ "is already taken"
@@ -88,38 +100,41 @@ defmodule HoloChatWeb.RoleplayLiveTest do
   describe "a role-play room" do
     setup do
       gm = user_scope_fixture()
-      %{gm: gm, room: roleplay_room_fixture(gm, %{"scenario" => "A storm traps everyone."})}
+
+      room =
+        roleplay_room_fixture(gm, %{
+          "title" => "The Inn",
+          "description" => "A storm traps everyone."
+        })
+
+      %{gm: gm, room: room}
     end
 
     test "shows its scene to everyone", %{conn: conn, room: room} do
       {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}")
 
-      assert has_element?(view, "#scene-title", room.title)
+      assert has_element?(view, "#scene-title", "The Inn")
       refute has_element?(view, "#scene-settings-link")
 
       view |> element("#show-scenario") |> render_click()
       assert has_element?(view, "#scenario", "A storm traps everyone.")
     end
 
-    test "shows its background image", %{conn: conn, gm: gm, room: room} do
-      {:ok, room} =
-        Rooms.update_room_image(gm, room, :background, image_binary(32, 18, {4, 5, 6}))
+    test "shows its scenario's background image", %{conn: conn, gm: gm, room: room} do
+      {:ok, scenario} =
+        Scenarios.update_scenario_image(
+          gm,
+          Scenarios.get_scenario(room.scenario_id),
+          :background,
+          image_binary(32, 18, {4, 5, 6})
+        )
 
       {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}")
 
       assert has_element?(
                view,
-               "#scene-background[style*='/avatars/#{room.background_image_id}']"
+               "#scene-background[style*='/avatars/#{scenario.background_image_id}']"
              )
-    end
-
-    test "updates the scene live when a game master changes it",
-         %{conn: conn, gm: gm, room: room} do
-      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}")
-
-      {:ok, _room} = Rooms.update_room(gm, room, %{"topic" => "The doors are sealed."})
-
-      assert has_element?(view, "#scene-topic", "The doors are sealed.")
     end
 
     test "marks role-play rooms in the room list", %{conn: conn, room: room} do
@@ -127,6 +142,8 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(view, "#room-link-#{room.name}[data-kind='roleplay']")
     end
   end
+
+  defp gm_user(scope), do: scope.user
 
   describe "scene settings" do
     setup %{conn: conn} do
@@ -136,27 +153,25 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       %{conn: log_in_user(conn, gm_user), gm: gm, room: room}
     end
 
-    test "let a game master edit the scene and upload images", %{conn: conn, room: room} do
+    test "show the current scenario and let its owner edit it", %{conn: conn, room: room} do
       {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
 
-      assert view
-             |> file_input("#scene-form", :card_image, [
-               %{name: "card.png", content: image_binary(64, 36, {9, 9, 9}), type: "image/png"}
-             ])
-             |> render_upload("card.png")
+      assert has_element?(view, "#current-scenario", "A Scenario")
 
-      {:ok, view, _html} =
-        view
-        |> form("#scene-form",
-          room: %{title: "New Title", topic: "New topic", scenario: "New scenario"}
-        )
-        |> render_submit()
-        |> follow_redirect(conn, ~p"/rooms/#{room.name}")
+      assert has_element?(
+               view,
+               "#edit-scenario-link[href='/scenarios/#{room.scenario_id}/edit']"
+             )
+    end
 
-      assert has_element?(view, "#scene-title", "New Title")
-      updated = Rooms.get_room(room.name)
-      assert updated.scenario == "New scenario"
-      assert updated.card_image_id
+    test "offer the scenario editor only to its owner", %{gm: gm} do
+      someone_elses = scenario_fixture(user_scope_fixture())
+      room = roleplay_room_fixture(gm, %{"scenario_id" => someone_elses.id})
+      conn = build_conn_with_unique_ip() |> log_in_user(gm_user(gm))
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+
+      refute has_element?(view, "#edit-scenario-link")
     end
 
     test "let a game master add and remove co-game masters", %{conn: conn, room: room} do

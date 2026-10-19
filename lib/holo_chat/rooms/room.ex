@@ -4,49 +4,38 @@ defmodule HoloChat.Rooms.Room do
   use Ecto.Schema
   import Ecto.Changeset
 
-  alias HoloChat.Characters.Tags
-
   schema "rooms" do
     field :name, :string
     field :kind, :string, default: "roleplay"
-    field :title, :string
-    field :topic, :string
-    field :scenario, :string
-    field :tags, {:array, :string}, default: []
-    field :tag_list, :string, virtual: true
     field :reply_policy, :string, default: "natural"
     field :reply_delay, :integer, default: 4
     field :max_ai_turns, :integer, default: 2
-    field :card_image_id, :binary_id
-    field :background_image_id, :binary_id
+    belongs_to :scenario, HoloChat.Scenarios.Scenario
 
     timestamps(type: :utc_datetime)
   end
 
   @doc """
-  Changeset for a new room: the name is chosen once and never changes.
+  Changeset for a new room: the name is chosen once and never changes, and
+  the first scenario is picked. Later scenarios are switched to, see
+  `HoloChat.Rooms.switch_scenario/3`.
   """
   def create_changeset(room, attrs) do
     room
-    |> cast(attrs, [:name])
+    |> cast(attrs, [:name, :scenario_id])
     |> update_change(:name, &String.trim/1)
-    |> validate_required([:name])
+    |> validate_required([:name, :scenario_id])
     |> unique_constraint(:name, message: "is already taken")
+    |> foreign_key_constraint(:scenario_id, message: "does not exist")
     |> changeset(attrs)
   end
 
   @doc """
-  Changeset for the scene a game master edits.
+  Changeset for the settings the game masters edit: how the cast takes turns.
   """
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:title, :topic, :scenario, :reply_policy, :reply_delay, :max_ai_turns])
-    |> Tags.cast_tag_list(attrs)
-    |> update_change(:title, &String.trim/1)
-    |> validate_required([:title])
-    |> validate_length(:title, max: 60)
-    |> validate_length(:topic, max: 160)
-    |> validate_length(:scenario, max: 4000)
+    |> cast(attrs, [:reply_policy, :reply_delay, :max_ai_turns])
     |> validate_inclusion(:reply_policy, ~w(natural mention))
     |> validate_number(:reply_delay, greater_than_or_equal_to: 0, less_than_or_equal_to: 60)
     |> validate_number(:max_ai_turns, greater_than_or_equal_to: 1, less_than_or_equal_to: 5)

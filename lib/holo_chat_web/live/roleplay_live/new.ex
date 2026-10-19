@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.RoleplayLive.New do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.Rooms
+  alias HoloChat.{Rooms, Scenarios}
 
   @impl true
   def render(assigns) do
@@ -11,12 +11,45 @@ defmodule HoloChatWeb.RoleplayLive.New do
         <.header>
           New scene
           <:subtitle>
-            You become its game master. You can add images and more game masters afterwards.
+            Open a room that plays a scenario. You become its game master and can switch to
+            another scenario at any time.
           </:subtitle>
         </.header>
 
-        <.form for={@form} id="room-form" phx-change="validate" phx-submit="save">
-          <.input field={@form[:title]} type="text" label="Title" placeholder="The Sunken Keep" />
+        <div
+          :if={@scenario_options == []}
+          id="no-scenarios"
+          class="rounded-2xl border border-dashed border-base-300 p-6 text-center text-sm"
+        >
+          <p class="opacity-70">There are no scenarios to play yet.</p>
+          <.link
+            navigate={~p"/scenarios/new"}
+            class="mt-2 inline-block font-medium text-primary hover:underline"
+          >
+            Write the first one
+          </.link>
+        </div>
+
+        <.form
+          :if={@scenario_options != []}
+          for={@form}
+          id="room-form"
+          phx-change="validate"
+          phx-submit="save"
+        >
+          <.input
+            field={@form[:scenario_id]}
+            type="select"
+            label="Scenario"
+            prompt="Pick a scenario"
+            options={@scenario_options}
+          />
+          <p class="-mt-1 mb-3 text-xs opacity-60">
+            Missing one? <.link
+              navigate={~p"/scenarios/new"}
+              class="font-medium text-primary hover:underline"
+            >Write a scenario</.link>.
+          </p>
           <.input
             field={@form[:name]}
             type="text"
@@ -27,29 +60,7 @@ defmodule HoloChatWeb.RoleplayLive.New do
           <p class="-mt-1 mb-3 text-xs opacity-60">
             Lowercase letters, digits and dashes. The room lives at /rooms/<i>name</i>.
           </p>
-          <.input
-            field={@form[:topic]}
-            type="text"
-            label="Topic"
-            placeholder="One line shown on the card and above the chat"
-          />
-          <.input
-            field={@form[:tag_list]}
-            type="text"
-            label="Tags"
-            placeholder="harry-potter, hogwarts"
-          />
-          <p class="-mt-1 mb-3 text-xs opacity-60">
-            Comma-separated. Characters with the same tags are suggested for the cast.
-          </p>
-          <.input
-            field={@form[:scenario]}
-            type="textarea"
-            label="Scenario"
-            rows="6"
-            placeholder="Where and when the scene plays, and what is going on."
-          />
-          <.button variant="primary" phx-disable-with="Creating…">Create scene</.button>
+          <.button variant="primary" phx-disable-with="Opening…">Open the room</.button>
         </.form>
       </div>
     </Layouts.app>
@@ -57,11 +68,15 @@ defmodule HoloChatWeb.RoleplayLive.New do
   end
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
+    # Coming from a scenario card preselects that scenario.
+    attrs = %{"scenario_id" => params["scenario"]}
+
     {:ok,
      socket
      |> assign(:page_title, "New scene")
-     |> assign(:form, to_form(Rooms.change_room(nil), as: :room))}
+     |> assign(:scenario_options, Enum.map(Scenarios.list_scenarios(), &{&1.title, &1.id}))
+     |> assign(:form, to_form(Rooms.change_room(nil, attrs), as: :room))}
   end
 
   @impl true

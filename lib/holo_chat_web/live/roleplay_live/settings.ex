@@ -1,9 +1,7 @@
 defmodule HoloChatWeb.RoleplayLive.Settings do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.{Characters, Rooms}
-
-  @image_kinds [card_image: :card, background_image: :background]
+  alias HoloChat.{Characters, Rooms, Scenarios}
 
   @impl true
   def render(assigns) do
@@ -20,20 +18,63 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
           </:subtitle>
         </.header>
 
-        <.form for={@form} id="scene-form" phx-change="validate" phx-submit="save">
-          <.input field={@form[:title]} type="text" label="Title" />
-          <.input field={@form[:topic]} type="text" label="Topic" />
-          <.input
-            field={@form[:tag_list]}
-            type="text"
-            label="Tags"
-            placeholder="harry-potter, hogwarts"
-          />
-          <p class="-mt-1 mb-3 text-xs opacity-60">
-            Comma-separated. Characters with the same tags are suggested for the cast.
-          </p>
-          <.input field={@form[:scenario]} type="textarea" label="Scenario" rows="8" />
+        <section id="scenario" class="space-y-4">
+          <h2 class="text-lg font-semibold">Scenario</h2>
+          <div
+            id="current-scenario"
+            class="flex items-center gap-4 rounded-xl border border-base-300 p-3"
+          >
+            <div class="aspect-video w-28 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-sky-500 via-indigo-500 to-fuchsia-500">
+              <img
+                :if={@room.scenario && @room.scenario.card_image_id}
+                src={~p"/avatars/#{@room.scenario.card_image_id}"}
+                alt=""
+                class="size-full object-cover"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="truncate font-semibold">
+                {if @room.scenario, do: @room.scenario.title, else: "No scenario"}
+              </p>
+              <p :if={@room.scenario} class="line-clamp-2 text-sm opacity-70">
+                {@room.scenario.topic}
+              </p>
+            </div>
+            <.link
+              :if={@room.scenario && Scenarios.can_edit?(@current_scope, @room.scenario)}
+              id="edit-scenario-link"
+              navigate={~p"/scenarios/#{@room.scenario.id}/edit"}
+              class="rounded-lg px-2 py-1 text-xs font-medium opacity-70 transition hover:bg-base-200 hover:opacity-100"
+            >
+              Edit
+            </.link>
+          </div>
 
+          <.form
+            for={@switch_form}
+            id="switch-scenario-form"
+            phx-submit="switch_scenario"
+            class="flex items-start gap-2"
+          >
+            <div class="flex-1">
+              <.input
+                field={@switch_form[:scenario_id]}
+                type="select"
+                options={@scenario_options}
+                aria-label="Next scenario"
+              />
+            </div>
+            <.button data-confirm="Switch scenarios? The cast is replaced, and the characters forget everything that happened so far.">
+              Switch
+            </.button>
+          </.form>
+          <p class="-mt-2 text-xs opacity-60">
+            Switching announces the new scenario in the chat and casts its suggested characters.
+            Browse the <.link navigate={~p"/scenarios"} class="font-medium text-primary">scenario library</.link>.
+          </p>
+        </section>
+
+        <.form for={@form} id="scene-form" phx-change="validate" phx-submit="save">
           <fieldset id="reply-settings" class="mb-4 rounded-xl border border-base-300 p-4">
             <legend class="px-1 text-sm font-semibold">How the cast takes turns</legend>
             <.input
@@ -67,23 +108,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
             </p>
           </fieldset>
 
-          <div class="mb-4 grid gap-4 sm:grid-cols-2">
-            <.image_upload
-              upload={@uploads.card_image}
-              label="Card image"
-              hint="Shown on the role-play overview, cropped to 16:9."
-              current={@room.card_image_id}
-            />
-            <.image_upload
-              upload={@uploads.background_image}
-              label="Background"
-              hint="Shown behind the chat, cropped to 16:9."
-              current={@room.background_image_id}
-            />
-          </div>
-          <p :if={@image_error} id="image-error" class="mb-3 text-sm text-error">{@image_error}</p>
-
-          <.button variant="primary" phx-disable-with="Saving…">Save scene</.button>
+          <.button variant="primary" phx-disable-with="Saving…">Save settings</.button>
         </.form>
 
         <section id="cast" class="space-y-4">
@@ -96,62 +121,13 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
             </p>
           </div>
 
-          <ul
-            :if={@cast != []}
-            id="cast-members"
-            class="divide-y divide-base-300 rounded-xl border border-base-300"
-          >
-            <li
-              :for={character <- @cast}
-              id={"cast-member-#{character.id}"}
-              class="flex items-center gap-3 px-3 py-2"
-            >
-              <.avatar name={character.name} avatar_id={character.avatar_id} class="size-8 text-xs" />
-              <span class="flex-1 text-sm font-medium">{character.name}</span>
-              <button
-                id={"uncast-#{character.id}"}
-                type="button"
-                phx-click="uncast"
-                phx-value-id={character.id}
-                class="rounded-lg px-2 py-1 text-xs opacity-70 transition hover:bg-base-200 hover:opacity-100"
-              >
-                Remove
-              </button>
-            </li>
-          </ul>
-          <p :if={@cast == []} id="cast-empty" class="text-sm opacity-60">
-            Nobody is cast yet.
-          </p>
-
-          <div :if={@suggestions != []} id="suggested-characters" class="space-y-2">
-            <h3 class="text-sm font-semibold">Suggested for this scene</h3>
-            <div class="grid gap-2 sm:grid-cols-2">
-              <.cast_candidate
-                :for={character <- @suggestions}
-                id={"suggestion-#{character.id}"}
-                character={character}
-                matching={@room.tags}
-              />
-            </div>
-          </div>
-
-          <.form for={@search_form} id="cast-search-form" phx-change="search" phx-submit="search">
-            <.input
-              field={@search_form[:query]}
-              type="search"
-              placeholder="Find any character by name…"
-              autocomplete="off"
-              phx-debounce="250"
-            />
-          </.form>
-          <div :if={@search_results != []} id="search-results" class="grid gap-2 sm:grid-cols-2">
-            <.cast_candidate
-              :for={character <- @search_results}
-              id={"search-result-#{character.id}"}
-              character={character}
-              matching={@room.tags}
-            />
-          </div>
+          <.cast_editor
+            cast={@cast}
+            suggestions={@suggestions}
+            search_form={@search_form}
+            search_results={@search_results}
+            tags={scenario_tags(@room)}
+          />
         </section>
 
         <section id="game-masters" class="space-y-3">
@@ -198,78 +174,16 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     """
   end
 
-  attr :id, :string, required: true
-  attr :character, :map, required: true
-  attr :matching, :list, required: true
-
-  defp cast_candidate(assigns) do
-    ~H"""
-    <div id={@id} class="flex items-center gap-3 rounded-xl border border-base-300 p-2">
-      <.avatar name={@character.name} avatar_id={@character.avatar_id} class="size-9 text-sm" />
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-sm font-medium">{@character.name}</p>
-        <.tags tags={Enum.filter(@character.tags, &(&1 in @matching))} />
-      </div>
-      <button
-        id={"cast-#{@character.id}"}
-        type="button"
-        phx-click="cast"
-        phx-value-id={@character.id}
-        class="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/20"
-      >
-        <.icon name="hero-plus" class="size-3.5" /> Cast
-      </button>
-    </div>
-    """
-  end
-
-  attr :upload, :any, required: true
-  attr :label, :string, required: true
-  attr :hint, :string, required: true
-  attr :current, :string, default: nil
-
-  defp image_upload(assigns) do
-    ~H"""
-    <div class="space-y-2 text-sm">
-      <label class="font-medium" for={@upload.ref}>{@label}</label>
-      <div class="aspect-video overflow-hidden rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500">
-        <%= case @upload.entries do %>
-          <% [entry | _] -> %>
-            <.live_img_preview entry={entry} class="size-full object-cover" />
-          <% [] -> %>
-            <img :if={@current} src={~p"/avatars/#{@current}"} alt="" class="size-full object-cover" />
-        <% end %>
-      </div>
-      <.live_file_input upload={@upload} class="file-input file-input-sm w-full" />
-      <p class="text-xs opacity-60">{@hint} PNG, JPEG or GIF, up to 8 MB.</p>
-      <p :for={entry <- @upload.entries} class="text-xs">
-        <span :for={error <- upload_errors(@upload, entry)} class="text-error">
-          {upload_error(error)}
-        </span>
-      </p>
-    </div>
-    """
-  end
-
   @impl true
   def mount(%{"room" => name}, _session, socket) do
     scope = socket.assigns.current_scope
     room = Rooms.get_room(name)
 
     if room && Rooms.can_manage?(scope, room) do
-      socket =
-        Enum.reduce(Keyword.keys(@image_kinds), socket, fn upload, socket ->
-          allow_upload(socket, upload,
-            accept: ~w(.png .jpg .jpeg .gif),
-            max_entries: 1,
-            max_file_size: 8_000_000
-          )
-        end)
-
       {:ok,
        socket
        |> assign(:page_title, "Scene settings")
-       |> assign(:image_error, nil)
+       |> assign(:scenario_options, Enum.map(Scenarios.list_scenarios(), &{&1.title, &1.id}))
        |> assign(:master_form, to_form(%{"username" => ""}, as: :master))
        |> assign(:search_form, to_form(%{"query" => ""}, as: :search))
        |> assign_room(room)
@@ -291,19 +205,33 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
   def handle_event("save", %{"room" => params}, socket) do
     scope = socket.assigns.current_scope
 
-    with {:ok, room} <- Rooms.update_room(scope, socket.assigns.room, params),
-         {:ok, _room} <- save_images(socket, room) do
-      {:noreply,
-       socket
-       |> put_flash(:info, "Scene saved.")
-       |> push_navigate(to: ~p"/rooms/#{room.name}")}
-    else
-      {:error, :invalid_image} ->
+    case Rooms.update_room(scope, socket.assigns.room, params) do
+      {:ok, room} ->
         {:noreply,
-         assign(socket, :image_error, "An uploaded file could not be read as an image.")}
+         socket
+         |> put_flash(:info, "Scene saved.")
+         |> push_navigate(to: ~p"/rooms/#{room.name}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset, as: :room))}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
+    end
+  end
+
+  def handle_event("switch_scenario", %{"room" => %{"scenario_id" => id}}, socket) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Rooms.switch_scenario(scope, room, id) do
+      {:ok, room} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Now playing #{room.scenario.title}.")
+         |> assign_room(room)}
+
+      {:error, :not_found} ->
+        {:noreply, put_flash(socket, :error, "That scenario no longer exists.")}
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
@@ -380,34 +308,11 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     end
   end
 
-  # Each uploaded image replaces the room's current one; the room returned
-  # by the last update carries all new image ids.
-  defp save_images(socket, room) do
-    scope = socket.assigns.current_scope
-
-    Enum.reduce_while(@image_kinds, {:ok, room}, fn {upload, kind}, {:ok, room} ->
-      images =
-        consume_uploaded_entries(socket, upload, fn %{path: path}, _entry ->
-          {:ok, File.read!(path)}
-        end)
-
-      result =
-        case images do
-          [image] -> Rooms.update_room_image(scope, room, kind, image)
-          [] -> {:ok, room}
-        end
-
-      case result do
-        {:ok, room} -> {:cont, {:ok, room}}
-        error -> {:halt, error}
-      end
-    end)
-  end
-
   defp assign_room(socket, room) do
     socket
     |> assign(:room, room)
     |> assign(:form, to_form(Rooms.change_room(room), as: :room))
+    |> assign(:switch_form, to_form(%{"scenario_id" => room.scenario_id}, as: :room))
     |> assign_masters()
     |> assign_cast()
   end
@@ -430,8 +335,6 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     assign(socket, :masters, Rooms.list_game_masters(socket.assigns.room))
   end
 
-  defp upload_error(:too_large), do: "Larger than 8 MB."
-  defp upload_error(:not_accepted), do: "Not a PNG, JPEG or GIF."
-  defp upload_error(:too_many_files), do: "Only one image at a time."
-  defp upload_error(error), do: inspect(error)
+  defp scenario_tags(%{scenario: nil}), do: []
+  defp scenario_tags(%{scenario: scenario}), do: scenario.tags
 end

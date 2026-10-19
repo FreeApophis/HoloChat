@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.ChatLive do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.{Accounts, Assistant, Characters, Chat, Rooms}
+  alias HoloChat.{Accounts, Assistant, Characters, Chat, Rooms, Scenarios}
   alias HoloChat.Chat.Message
   alias HoloChatWeb.Presence
 
@@ -208,10 +208,10 @@ defmodule HoloChatWeb.ChatLive do
         <div class="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm">
           <%!-- Behind all content: -z-10 inside the isolated stacking context --%>
           <div
-            :if={@scene && @scene.background_image_id}
+            :if={@scenario && @scenario.background_image_id}
             id="scene-background"
             class="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center"
-            style={"background-image: url('#{~p"/avatars/#{@scene.background_image_id}"}')"}
+            style={"background-image: url('#{~p"/avatars/#{@scenario.background_image_id}"}')"}
           >
             <div class="absolute inset-0 bg-gradient-to-b from-base-100/70 via-base-100/80 to-base-100/90">
             </div>
@@ -226,11 +226,11 @@ defmodule HoloChatWeb.ChatLive do
               <div class="min-w-0 flex-1">
                 <h2 id="scene-title" class="flex items-center gap-2 text-lg font-semibold">
                   <.icon name="hero-sparkles" class="size-5 text-violet-500" />
-                  <span class="truncate">{@scene.title}</span>
+                  <span class="truncate">{if @scenario, do: @scenario.title, else: @room}</span>
                 </h2>
 
-                <p :if={@scene.topic} id="scene-topic" class="text-sm opacity-75">
-                  {@scene.topic}
+                <p :if={@scenario && @scenario.topic} id="scene-topic" class="text-sm opacity-75">
+                  {@scenario.topic}
                 </p>
                 <div
                   :if={@cast != []}
@@ -258,7 +258,7 @@ defmodule HoloChatWeb.ChatLive do
               </div>
 
               <button
-                :if={@scene.scenario}
+                :if={@scenario && @scenario.description}
                 id="show-scenario"
                 type="button"
                 phx-click="toggle_scenario"
@@ -280,9 +280,9 @@ defmodule HoloChatWeb.ChatLive do
               </.link>
             </div>
             <.markdown
-              :if={@show_scenario? && @scene.scenario}
+              :if={@show_scenario? && @scenario && @scenario.description}
               id="scenario"
-              text={@scene.scenario}
+              text={@scenario.description}
               class="mt-2 max-h-48 overflow-y-auto rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
             />
           </div>
@@ -366,67 +366,73 @@ defmodule HoloChatWeb.ChatLive do
               phx-viewport-top={@more_messages? && "load_older"}
               class="space-y-1"
             >
-              <div
-                :for={{id, message} <- @streams.messages}
-                id={id}
-                class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
-              >
-                <% author = author(message, @personas, @characters) %>
-                <button
-                  type="button"
-                  phx-click={author.profile? && "show_profile"}
-                  phx-value-user-id={message.user_id}
-                  phx-value-persona-id={message.persona_id}
-                  phx-value-character-id={message.character_id}
-                  class={["h-fit shrink-0 rounded-full", author.profile? && "cursor-pointer"]}
-                  aria-label={"Profile of #{author.name}"}
+              <div :for={{id, message} <- @streams.messages} id={id}>
+                <.scenario_intro
+                  :if={message.kind == "scenario"}
+                  message={message}
+                  scenario={@scenarios[message.scenario_id]}
+                />
+                <div
+                  :if={message.kind != "scenario"}
+                  class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
                 >
-                  <.avatar
-                    name={author.name}
-                    avatar_id={author.avatar_id}
-                    assistant={message.from_assistant}
-                  />
-                </button>
+                  <% author = author(message, @personas, @characters) %>
+                  <button
+                    type="button"
+                    phx-click={author.profile? && "show_profile"}
+                    phx-value-user-id={message.user_id}
+                    phx-value-persona-id={message.persona_id}
+                    phx-value-character-id={message.character_id}
+                    class={["h-fit shrink-0 rounded-full", author.profile? && "cursor-pointer"]}
+                    aria-label={"Profile of #{author.name}"}
+                  >
+                    <.avatar
+                      name={author.name}
+                      avatar_id={author.avatar_id}
+                      assistant={message.from_assistant}
+                    />
+                  </button>
 
-                <div class="min-w-0">
-                  <div class="flex items-baseline gap-2">
-                    <button
-                      type="button"
-                      data-role="author"
-                      phx-click={author.profile? && "show_profile"}
-                      phx-value-user-id={message.user_id}
-                      phx-value-persona-id={message.persona_id}
-                      phx-value-character-id={message.character_id}
-                      class={["text-sm font-semibold", author.profile? && "hover:underline"]}
-                    >
-                      {author.name}
-                    </button>
+                  <div class="min-w-0">
+                    <div class="flex items-baseline gap-2">
+                      <button
+                        type="button"
+                        data-role="author"
+                        phx-click={author.profile? && "show_profile"}
+                        phx-value-user-id={message.user_id}
+                        phx-value-persona-id={message.persona_id}
+                        phx-value-character-id={message.character_id}
+                        class={["text-sm font-semibold", author.profile? && "hover:underline"]}
+                      >
+                        {author.name}
+                      </button>
 
-                    <span
-                      :if={message.from_assistant}
-                      data-role="assistant-badge"
-                      class="rounded bg-violet-500/15 px-1 text-[0.65rem] font-semibold tracking-wide text-violet-600"
-                    >
-                      AI
-                    </span>
+                      <span
+                        :if={message.from_assistant}
+                        data-role="assistant-badge"
+                        class="rounded bg-violet-500/15 px-1 text-[0.65rem] font-semibold tracking-wide text-violet-600"
+                      >
+                        AI
+                      </span>
 
-                    <time
-                      id={"message-time-#{message.id}"}
-                      datetime={DateTime.to_iso8601(message.inserted_at)}
-                      title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
-                      phx-hook=".LocalTime"
-                      phx-update="ignore"
-                      class="text-xs opacity-50"
-                    >
-                      {Calendar.strftime(message.inserted_at, "%H:%M")}
-                    </time>
+                      <time
+                        id={"message-time-#{message.id}"}
+                        datetime={DateTime.to_iso8601(message.inserted_at)}
+                        title={Calendar.strftime(message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+                        phx-hook=".LocalTime"
+                        phx-update="ignore"
+                        class="text-xs opacity-50"
+                      >
+                        {Calendar.strftime(message.inserted_at, "%H:%M")}
+                      </time>
+                    </div>
+
+                    <.markdown
+                      text={message.body}
+                      data-role="message-body"
+                      class="text-sm leading-relaxed"
+                    />
                   </div>
-
-                  <.markdown
-                    text={message.body}
-                    data-role="message-body"
-                    class="text-sm leading-relaxed"
-                  />
                 </div>
               </div>
             </div>
@@ -592,19 +598,75 @@ defmodule HoloChatWeb.ChatLive do
     """
   end
 
+  attr :message, :map, required: true
+  attr :scenario, :map, default: nil, doc: "nil once the scenario was deleted"
+
+  defp scenario_intro(assigns) do
+    ~H"""
+    <div
+      data-role="scenario-intro"
+      data-scenario-id={@message.scenario_id}
+      class="my-4 overflow-hidden rounded-2xl border border-violet-500/30 bg-base-100/80 shadow-sm backdrop-blur-sm"
+    >
+      <img
+        :if={@scenario && @scenario.card_image_id}
+        src={~p"/avatars/#{@scenario.card_image_id}"}
+        alt=""
+        class="aspect-[16/5] w-full object-cover"
+      />
+      <div class="space-y-2 bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 p-4">
+        <p class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-violet-600 uppercase">
+          <.icon name="hero-sparkles" class="size-4" /> This channel changes the scenario to:
+        </p>
+        <h3 class="text-xl font-bold tracking-tight">
+          {if @scenario, do: @scenario.title, else: @message.body}
+        </h3>
+        <p :if={@scenario && @scenario.topic} class="text-sm italic opacity-75">
+          {@scenario.topic}
+        </p>
+        <.markdown
+          :if={@scenario && @scenario.description}
+          text={@scenario.description}
+          class="max-h-72 overflow-y-auto text-sm leading-relaxed"
+        />
+        <p class="text-xs opacity-50">
+          Started by {@message.username} ·
+          <time
+            id={"message-time-#{@message.id}"}
+            datetime={DateTime.to_iso8601(@message.inserted_at)}
+            title={Calendar.strftime(@message.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+            phx-hook=".LocalTime"
+            phx-update="ignore"
+          >
+            {Calendar.strftime(@message.inserted_at, "%H:%M")}
+          </time>
+        </p>
+      </div>
+    </div>
+    """
+  end
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Chat.subscribe_rooms()
       Presence.subscribe_rooms()
       Assistant.subscribe()
+      Scenarios.subscribe()
     end
 
     {:ok,
      socket
      |> assign(:room, nil)
      |> assign(:roleplay_rooms, Rooms.roleplay_room_names())
-     |> assign(scene: nil, cast: [], can_manage_scene?: false, show_scenario?: false)
+     |> assign(
+       scene: nil,
+       scenario: nil,
+       cast: [],
+       can_manage_scene?: false,
+       show_scenario?: false
+     )
+     |> assign(:scenarios, %{})
      |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
      |> assign(:max_avatars, @max_avatars)
      |> assign(:me, presence_meta(socket.assigns.current_scope))
@@ -685,6 +747,7 @@ defmodule HoloChatWeb.ChatLive do
 
     socket
     |> remember_characters(messages)
+    |> remember_scenarios(messages)
     |> assign(oldest_message: List.first(messages), more_messages?: more?)
     |> assign(:has_messages?, messages != [])
     |> stream(:messages, messages, reset: true)
@@ -733,6 +796,7 @@ defmodule HoloChatWeb.ChatLive do
     {:noreply,
      socket
      |> remember_characters(older)
+     |> remember_scenarios(older)
      |> assign(oldest_message: List.first(older) || oldest, more_messages?: more?)
      # Inserting newest-first at index 0 leaves them in chronological order.
      |> stream(:messages, Enum.reverse(older), at: 0)}
@@ -800,6 +864,7 @@ defmodule HoloChatWeb.ChatLive do
     {:noreply,
      socket
      |> remember_characters([message])
+     |> remember_scenarios([message])
      |> assign(:has_messages?, true)
      |> stream_insert(:messages, message)}
   end
@@ -812,6 +877,22 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   def handle_info({:room_updated, _scene}, socket), do: {:noreply, socket}
+
+  # Edits of the scenario this room plays show up in the scene header.
+  def handle_info({:scenario_updated, scenario}, socket) do
+    socket =
+      if Map.has_key?(socket.assigns.scenarios, scenario.id),
+        do: update(socket, :scenarios, &Map.put(&1, scenario.id, scenario)),
+        else: socket
+
+    case socket.assigns.scene do
+      %{scenario_id: id} = scene when id == scenario.id ->
+        {:noreply, assign_scene(socket, %{scene | scenario: scenario})}
+
+      _other ->
+        {:noreply, socket}
+    end
+  end
 
   def handle_info({:room_activity, room, at}, socket) do
     active_rooms =
@@ -964,6 +1045,7 @@ defmodule HoloChatWeb.ChatLive do
   defp assign_scene(socket, scene) do
     socket
     |> assign(:scene, scene)
+    |> assign(:scenario, scene && scene.scenario)
     |> assign(:cast, if(scene, do: Rooms.list_cast(scene), else: []))
     |> assign(
       :can_manage_scene?,
@@ -995,6 +1077,28 @@ defmodule HoloChatWeb.ChatLive do
       ids ->
         loaded = Map.new(Characters.list_characters_by_ids(ids), &{&1.id, &1})
         assign(socket, :characters, Map.merge(known, loaded))
+    end
+  end
+
+  # Loads the scenarios that intro messages in `messages` announce.
+  defp remember_scenarios(socket, messages) do
+    known = socket.assigns.scenarios
+
+    missing =
+      for %{kind: "scenario", scenario_id: id} <- messages,
+          is_integer(id),
+          not Map.has_key?(known, id),
+          uniq: true do
+        id
+      end
+
+    case missing do
+      [] ->
+        socket
+
+      ids ->
+        loaded = Map.new(Scenarios.list_scenarios_by_ids(ids), &{&1.id, &1})
+        assign(socket, :scenarios, Map.merge(known, loaded))
     end
   end
 

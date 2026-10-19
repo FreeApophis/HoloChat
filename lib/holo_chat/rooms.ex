@@ -3,24 +3,30 @@ defmodule HoloChat.Rooms do
   The Rooms context: role-play rooms, their game masters and their scene.
 
   Plain chat rooms need no record; they exist as soon as someone posts.
-  A role-play room has one, holding the scene (title, topic line, scenario,
-  card and background image) that its game masters edit.
+  A role-play room has one. It plays one scenario from the library (see
+  `HoloChat.Scenarios`) at a time with its own cast, and its game masters
+  can switch to another scenario; each switch is announced in the chat.
   """
 
   use Boundary,
-    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars, HoloChat.Characters, HoloChat.Chat],
+    deps: [
+      HoloChat.Repo,
+      HoloChat.Accounts,
+      HoloChat.Characters,
+      HoloChat.Chat,
+      HoloChat.Scenarios
+    ],
     exports: [Room]
 
   import Ecto.Query, warn: false
 
-  alias HoloChat.{Accounts, Avatars, Characters, Chat}
+  alias HoloChat.{Accounts, Characters, Chat, Scenarios}
   alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Repo
   alias HoloChat.Rooms.{CastMember, GameMaster, Room}
 
   @pubsub HoloChat.PubSub
   @scenes_topic "scenes"
-  @image_sizes %{card: {640, 360}, background: {1600, 900}}
 
   @doc """
   Subscribes the calling process to changes of the room called `name`.
@@ -42,21 +48,29 @@ defmodule HoloChat.Rooms do
 
   @doc """
   Returns every role-play room that has a cast, as `{room, cast}` pairs.
+  Rooms come with their scenario.
   """
   def list_staged_scenes do
     rooms =
-      Repo.all(from r in Room, join: cm in CastMember, on: cm.room_id == r.id, distinct: true)
+      Repo.all(
+        from r in Room,
+          join: cm in CastMember,
+          on: cm.room_id == r.id,
+          distinct: true,
+          preload: :scenario
+      )
 
     Enum.map(rooms, &{&1, list_cast(&1)})
   end
 
   @doc """
-  Returns all role-play rooms, newest first.
+  Returns all role-play rooms with their scenario, newest first.
   """
   def list_roleplay_rooms do
     Room
     |> where(kind: "roleplay")
     |> order_by(desc: :inserted_at, desc: :id)
+    |> preload(:scenario)
     |> Repo.all()
   end
 
@@ -72,16 +86,20 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Gets the room called `name`, or nil if it has no record.
+  Gets the room called `name` with its scenario, or nil if it has no record.
   """
-  def get_room(name) when is_binary(name), do: Repo.get_by(Room, name: name)
+  def get_room(name) when is_binary(name) do
+    Room |> Repo.get_by(name: name) |> Repo.preload(:scenario)
+  end
 
   @doc """
-  Creates a role-play room with the scope's user as its game master.
+  Creates a role-play room with the scope's user as its game master,
+  playing the scenario `"scenario_id"` with its suggested cast. The scenario
+  is announced in the chat.
 
   The name must be a valid room name that no chat or role-play room uses yet.
   """
-  def create_roleplay_room(%Scope{user: %User{} = user}, attrs) do
+  def create_roleplay_room(%Scope{user: %User{} = user} = scope, attrs) do
     changeset =
       %Room{kind: "roleplay"}
       |> Room.create_changeset(attrs)
@@ -90,9 +108,12 @@ defmodule HoloChat.Rooms do
     Repo.transact(fn ->
       with {:ok, room} <- Repo.insert(changeset) do
         Repo.insert!(%GameMaster{room_id: room.id, user_id: user.id})
+        room = Repo.preload(room, :scenario)
+        replace_cast(room, Scenarios.list_cast(room.scenario))
         {:ok, room}
       end
     end)
+    |> announce_scenario(scope)
   end
 
   def create_roleplay_room(_scope, _attrs), do: {:error, :unauthorized}
@@ -111,16 +132,12 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Returns a changeset for creating a room (`nil` room) or editing its scene.
+  Returns a changeset for creating a room (`nil` room) or editing its
+  settings.
   """
   def change_room(room, attrs \\ %{})
   def change_room(nil, attrs), do: Room.create_changeset(%Room{}, attrs)
-
-  def change_room(%Room{} = room, attrs) do
-    room
-    |> Map.put(:tag_list, room.tag_list || Characters.Tags.format(room.tags))
-    |> Room.changeset(attrs)
-  end
+  def change_room(%Room{} = room, attrs), do: Room.changeset(room, attrs)
 
   @doc """
   Returns true if the scope's user is one of the room's game masters.
@@ -137,7 +154,8 @@ defmodule HoloChat.Rooms do
   def can_manage?(scope, room), do: Accounts.admin?(scope) or game_master?(scope, room)
 
   @doc """
-  Updates the scene (title, topic, scenario) and announces the change.
+  Updates the room's settings (how the cast takes turns) and announces the
+  change.
   """
   def update_room(scope, %Room{} = room, attrs) do
     authorize(scope, room, fn ->
@@ -146,29 +164,49 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Replaces the room's `:card` (640x360) or `:background` (1600x900) image
-  with an uploaded one, deleting the old image.
+  Makes the room play another scenario: its suggested cast replaces the
+  room's cast, and the change is announced in the chat. From then on the
+  cast only remembers what happened since (see `HoloChat.Assistant`).
   """
-  def update_room_image(scope, %Room{} = room, kind, image)
-      when is_map_key(@image_sizes, kind) and is_binary(image) do
+  def switch_scenario(scope, %Room{} = room, scenario_id) do
     authorize(scope, room, fn ->
-      room |> replace_image(image_field(kind), @image_sizes[kind], image) |> broadcast_update()
-    end)
-  end
-
-  defp replace_image(room, field, size, image) do
-    Repo.transact(fn ->
-      with {:ok, new_image} <- Avatars.create_avatar(image, size),
-           {:ok, updated} <-
-             room |> Ecto.Changeset.change([{field, new_image.id}]) |> Repo.update() do
-        :ok = Avatars.delete_avatar(Map.fetch!(room, field))
-        {:ok, updated}
+      case Scenarios.get_scenario(scenario_id) do
+        nil -> {:error, :not_found}
+        scenario -> room |> play(scenario) |> announce_scenario(scope)
       end
     end)
   end
 
-  defp image_field(:card), do: :card_image_id
-  defp image_field(:background), do: :background_image_id
+  defp play(room, scenario) do
+    Repo.transact(fn ->
+      with {:ok, room} <-
+             room |> Ecto.Changeset.change(scenario_id: scenario.id) |> Repo.update() do
+        replace_cast(room, Scenarios.list_cast(scenario))
+        {:ok, %{room | scenario: scenario}}
+      end
+    end)
+  end
+
+  defp replace_cast(room, characters) do
+    Repo.delete_all(from cm in CastMember, where: cm.room_id == ^room.id)
+
+    Repo.insert_all(
+      CastMember,
+      for(c <- characters, do: %{room_id: room.id, character_id: c.id, inserted_at: now()})
+    )
+  end
+
+  defp now, do: DateTime.utc_now(:second)
+
+  # After the transaction, so the room is committed when listeners react.
+  defp announce_scenario({:ok, room}, scope) do
+    {:ok, _message} =
+      Chat.create_scenario_message(scope, room.name, room.scenario.id, room.scenario.title)
+
+    broadcast_update({:ok, room})
+  end
+
+  defp announce_scenario(error, _scope), do: error
 
   @doc """
   Returns the room's game masters with their public fields, by name.
@@ -236,11 +274,17 @@ defmodule HoloChat.Rooms do
   def list_cast(%Room{} = room), do: Characters.list_characters_by_ids(cast_ids(room))
 
   @doc """
-  Suggests library characters for the room: those sharing its tags, most
-  shared tags first, leaving out the ones already cast.
+  Suggests library characters for the room: those sharing its scenario's
+  tags, most shared tags first, leaving out the ones already cast.
   """
   def suggest_cast(%Room{} = room, limit \\ 12) do
-    Characters.suggest_characters(room.tags, cast_ids(room), limit)
+    tags =
+      case Repo.preload(room, :scenario).scenario do
+        nil -> []
+        scenario -> scenario.tags
+      end
+
+    Characters.suggest_characters(tags, cast_ids(room), limit)
   end
 
   @doc """
@@ -277,7 +321,7 @@ defmodule HoloChat.Rooms do
     end)
   end
 
-  defp cast_ids(%Room{id: room_id}) do
+    defp cast_ids(%Room{id: room_id}) do
     Repo.all(from cm in CastMember, where: cm.room_id == ^room_id, select: cm.character_id)
   end
 
@@ -285,10 +329,12 @@ defmodule HoloChat.Rooms do
     if can_manage?(scope, room), do: fun.(), else: {:error, :unauthorized}
   end
 
-  defp broadcast_update({:ok, %Room{} = room} = result) do
+  # Listeners get the room with its scenario.
+  defp broadcast_update({:ok, %Room{} = room}) do
+    room = Repo.preload(room, :scenario)
     Phoenix.PubSub.broadcast(@pubsub, topic(room.name), {:room_updated, room})
     Phoenix.PubSub.broadcast(@pubsub, @scenes_topic, {:scene_changed, room.name})
-    result
+    {:ok, room}
   end
 
   defp broadcast_update(error), do: error

@@ -5,8 +5,9 @@ defmodule HoloChat.Assistant.ScenePromptTest do
   alias HoloChat.Characters.Character
   alias HoloChat.Chat.Message
   alias HoloChat.Rooms.Room
+  alias HoloChat.Scenarios.Scenario
 
-  @room %Room{title: "Tea at the Burrow", scenario: "A rainy afternoon."}
+  @room %Room{scenario: %Scenario{title: "Tea at the Burrow", description: "A rainy afternoon."}}
   @luna %Character{
     id: 1,
     name: "Luna",
@@ -50,6 +51,20 @@ defmodule HoloChat.Assistant.ScenePromptTest do
                %{role: "assistant", content: "Hello, everyone."},
                %{role: "user", content: "bob: Tea?"}
              ]
+    end
+
+    test "leaves out everything before the latest scenario change" do
+      history = [
+        human("ada", "In the old scene"),
+        %Message{username: "gm", body: "Tea at the Burrow", kind: "scenario", user_id: 8},
+        human("bob", "In the new scene")
+      ]
+
+      [system | turns] = ScenePrompt.build(@room, @luna, [@luna], history)
+
+      assert turns == [%{role: "user", content: "bob: In the new scene"}]
+      refute system.content =~ "ada"
+      refute system.content =~ "gm (a player)"
     end
 
     test "never ends on the character's own turn" do

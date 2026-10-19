@@ -71,17 +71,6 @@ defmodule HoloChatWeb.RoleplayCastTest do
 
       refute has_element?(view, "#cast-member-#{character.id}")
     end
-
-    test "edit the scene's tags", %{conn: conn, room: room} do
-      tag = unique_tag()
-      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
-
-      view
-      |> form("#scene-form", room: %{tag_list: tag})
-      |> render_submit()
-
-      assert Rooms.get_room(room.name).tags == [tag]
-    end
   end
 
   describe "in the scene" do

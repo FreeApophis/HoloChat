@@ -7,9 +7,10 @@ defmodule HoloChatWeb.SceneRepliesTest do
   import HoloChat.AccountsFixtures
   import HoloChat.CharactersFixtures
   import HoloChat.RoomsFixtures
+  import HoloChat.ScenariosFixtures
   import HoloChatWeb.PresenceHelpers
 
-  alias HoloChat.{Accounts, Assistant, Chat, Rooms}
+  alias HoloChat.{Accounts, Assistant, Chat, Rooms, Scenarios}
   alias HoloChat.Assistant.{LLMMock, Server}
   alias HoloChatWeb.Presence
 
@@ -22,7 +23,7 @@ defmodule HoloChatWeb.SceneRepliesTest do
 
     gm = user_scope_fixture()
     # No waiting in tests: the cast answers as soon as a player has posted.
-    room = roleplay_room_fixture(gm, %{"scenario" => "A tea party in the Burrow."})
+    room = roleplay_room_fixture(gm, %{"description" => "A tea party in the Burrow."})
     {:ok, room} = Rooms.update_room(gm, room, %{"reply_delay" => "0"})
 
     luna =
@@ -155,6 +156,52 @@ defmodule HoloChatWeb.SceneRepliesTest do
 
     send(llm, :continue)
     assert_receive {:new_message, %{from_assistant: true}}, 1000
+  end
+
+  test "the cast only remembers what happened since the scenario changed",
+       %{gm: gm, room: room, luna: luna} do
+    {:ok, _} =
+      Chat.create_message(user_scope_fixture(), room.name, %{"body" => "Back at the Burrow"})
+
+    garden =
+      scenario_fixture(gm, %{"title" => "The garden", "description" => "Gnomes, everywhere."})
+
+    {:ok, _} = Scenarios.cast_character(gm, garden, luna.id)
+    {:ok, _} = Rooms.switch_scenario(gm, room, garden.id)
+
+    start_server()
+    {_player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      prompt = Enum.map_join(messages, "\n", & &1.content)
+      assert prompt =~ "Gnomes, everywhere."
+      refute prompt =~ "Back at the Burrow"
+      refute prompt =~ "A tea party in the Burrow."
+      {:ok, "*chases a gnome*"}
+    end)
+
+    view |> form("#message-form", message: %{body: "Where are we?"}) |> render_submit()
+
+    assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+  end
+
+  test "a scenario change is no player turn for the cast", %{gm: gm, room: room, luna: luna} do
+    garden = scenario_fixture(gm, %{"title" => "The garden"})
+    {:ok, _} = Scenarios.cast_character(gm, garden, luna.id)
+    start_server()
+    await_presence(%{name: "Luna Lovegood"})
+
+    test = self()
+
+    stub(LLMMock, :chat, fn _url, _messages, _opts ->
+      send(test, :llm_called)
+      {:ok, "Hm."}
+    end)
+
+    {:ok, _} = Rooms.switch_scenario(gm, room, garden.id)
+
+    assert_receive {:new_message, %{kind: "scenario"}}
+    refute_receive :llm_called, 300
   end
 
   test "game masters choose how the cast takes turns", %{room: room} do
