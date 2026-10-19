@@ -84,8 +84,9 @@ defmodule HoloChatWeb.Router do
 
     live_session :current_user,
       on_mount: [{HoloChatWeb.UserAuth, :mount_current_scope}] do
+      live "/", HomeLive, :index
+
       # Guests can read the chat; posting requires a user.
-      live "/", ChatLive
       live "/rooms/:room", ChatLive
       live "/roleplay", RoleplayLive.Index, :index
       live "/characters", CharacterLive.Index, :index

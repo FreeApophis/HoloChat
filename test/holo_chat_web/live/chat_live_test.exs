@@ -13,7 +13,7 @@ defmodule HoloChatWeb.ChatLiveTest do
     test "shows the lobby with its history", %{conn: conn} do
       message = message_fixture(user_scope_fixture(), "lobby", %{"body" => "earlier"})
 
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/rooms/lobby")
 
       assert has_element?(view, "#room-title", "lobby")
       assert has_element?(view, "#messages-#{message.id}", "earlier")
@@ -141,7 +141,7 @@ defmodule HoloChatWeb.ChatLiveTest do
   end
 
   test "switching rooms normalizes the name", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/rooms/lobby")
 
     view
     |> form("#room-form", room: %{name: "#Elixir Fans!"})
@@ -153,6 +153,6 @@ defmodule HoloChatWeb.ChatLiveTest do
   end
 
   test "an invalid room in the URL redirects to the lobby", %{conn: conn} do
-    assert {:error, {:live_redirect, %{to: "/"}}} = live(conn, ~p"/rooms/Not_Valid")
+    assert {:error, {:live_redirect, %{to: "/rooms/lobby"}}} = live(conn, ~p"/rooms/Not_Valid")
   end
 end

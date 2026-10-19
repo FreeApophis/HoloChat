@@ -45,6 +45,15 @@ defmodule HoloChatWeb.Layouts do
         </.link>
         <nav class="flex items-center gap-2 text-sm sm:gap-3">
           <.link
+            id="lobby-nav-link"
+            navigate={~p"/rooms/lobby"}
+            class="rounded-lg p-1.5 transition hover:bg-base-200"
+            aria-label="Lobby"
+            title="Lobby"
+          >
+            <.icon name="hero-chat-bubble-left-right" class="size-5" />
+          </.link>
+          <.link
             id="roleplay-nav-link"
             navigate={~p"/roleplay"}
             class="rounded-lg p-1.5 text-violet-600 transition hover:bg-base-200"

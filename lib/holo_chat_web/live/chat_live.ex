@@ -517,14 +517,14 @@ defmodule HoloChatWeb.ChatLive do
   # per-tab state such as unread rooms) lives across room changes.
   @impl true
   def handle_params(params, _uri, socket) do
-    room = Map.get(params, "room", @default_room)
+    %{"room" => room} = params
 
     cond do
       not Chat.valid_room?(room) ->
         {:noreply,
          socket
          |> put_flash(:error, "Room names may only contain lowercase letters, digits and dashes.")
-         |> push_navigate(to: ~p"/")}
+         |> push_navigate(to: room_path(@default_room))}
 
       room == socket.assigns.room ->
         {:noreply, socket}
@@ -916,7 +916,6 @@ defmodule HoloChatWeb.ChatLive do
     end)
   end
 
-  defp room_path(@default_room), do: ~p"/"
   defp room_path(room), do: ~p"/rooms/#{room}"
 
   defp normalize_room(name) do
