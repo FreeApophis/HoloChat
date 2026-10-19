@@ -298,13 +298,27 @@ defmodule HoloChatWeb.ChatLive do
                     phx-value-user-id={person.user_id}
                     phx-value-persona-id={person.persona_id}
                     phx-value-character-id={person.character_id}
+                    phx-value-cloak-id={person.cloak && person.cloak.id}
                     data-user-id={person.user_id}
                     data-persona-id={person.persona_id}
                     data-character-id={person.character_id}
-                    title={person.name}
+                    data-cloak-id={person.cloak && person.cloak.id}
+                    title={
+                      if(person.cloak,
+                        do: "#{person.cloak.name} (played by #{person.name})",
+                        else: person.name
+                      )
+                    }
                     class="rounded-full ring-2 ring-base-100 transition hover:z-10 hover:scale-110"
                   >
+                    <.cloaked_avatar
+                      :if={person.cloak}
+                      cloak={person.cloak}
+                      actor={person}
+                      class="size-6 text-[0.65rem]"
+                    />
                     <.avatar
+                      :if={!person.cloak}
                       name={person.name}
                       avatar_id={person.avatar_id}
                       assistant={person.assistant}
@@ -403,11 +417,14 @@ defmodule HoloChatWeb.ChatLive do
                     phx-click={author.profile? && "show_profile"}
                     phx-value-user-id={message.user_id}
                     phx-value-persona-id={message.persona_id}
-                    phx-value-character-id={message.character_id}
+                    phx-value-character-id={!author.actor && message.character_id}
+                    phx-value-cloak-id={author.actor && message.character_id}
                     class={["h-fit shrink-0 rounded-full", author.profile? && "cursor-pointer"]}
                     aria-label={"Profile of #{author.name}"}
                   >
+                    <.cloaked_avatar :if={author.actor} cloak={author} actor={author.actor} />
                     <.avatar
+                      :if={!author.actor}
                       name={author.name}
                       avatar_id={author.avatar_id}
                       assistant={message.from_assistant}
@@ -422,11 +439,21 @@ defmodule HoloChatWeb.ChatLive do
                         phx-click={author.profile? && "show_profile"}
                         phx-value-user-id={message.user_id}
                         phx-value-persona-id={message.persona_id}
-                        phx-value-character-id={message.character_id}
+                        phx-value-character-id={!author.actor && message.character_id}
+                        phx-value-cloak-id={author.actor && message.character_id}
                         class={["text-sm font-semibold", author.profile? && "hover:underline"]}
                       >
                         {author.name}
                       </button>
+
+                      <span
+                        :if={author.actor}
+                        data-role="actor-badge"
+                        title={"A human player in the role of #{author.name}"}
+                        class="flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-[0.65rem] font-semibold text-amber-700 dark:text-amber-400"
+                      >
+                        <.icon name="hero-user" class="size-3" /> played by {author.actor.name}
+                      </span>
 
                       <span
                         :if={message.from_assistant}
@@ -529,6 +556,76 @@ defmodule HoloChatWeb.ChatLive do
             <% end %>
           </div>
 
+          <div :if={@current_scope} class="relative">
+            <div
+              id="wardrobe"
+              phx-click-away={JS.hide(to: "#wardrobe")}
+              phx-window-keydown={JS.hide(to: "#wardrobe")}
+              phx-key="Escape"
+              class="absolute bottom-full left-3 z-30 mb-2 hidden w-72 rounded-2xl border border-base-300 bg-base-100 p-3 shadow-xl"
+            >
+              <h2 class="flex items-center gap-1.5 text-sm font-semibold">
+                <.icon name="hero-identification" class="size-4 text-amber-600" /> Wardrobe
+              </h2>
+              <p class="mt-0.5 mb-2 text-xs opacity-60">
+                Wear a character from the library in ##{@room}. Others see it's you playing.
+              </p>
+              <.form
+                for={@wardrobe_form}
+                id="wardrobe-search"
+                phx-change="wardrobe_search"
+                phx-submit="wardrobe_search"
+              >
+                <.input
+                  field={@wardrobe_form[:query]}
+                  type="search"
+                  placeholder="Find a character…"
+                  autocomplete="off"
+                  phx-debounce="250"
+                />
+              </.form>
+              <div class="max-h-60 space-y-0.5 overflow-y-auto">
+                <button
+                  :for={character <- @wardrobe_results}
+                  id={"wardrobe-option-#{character.id}"}
+                  type="button"
+                  phx-click={JS.push("wear", value: %{id: character.id}) |> JS.hide(to: "#wardrobe")}
+                  class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition hover:bg-base-200"
+                >
+                  <.avatar
+                    name={character.name}
+                    avatar_id={character.avatar_id}
+                    class="size-7 text-xs"
+                  />
+                  <span class="min-w-0 flex-1 truncate">{character.name}</span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              :if={@cloak}
+              id="current-cloak"
+              class="mx-3 mt-2 flex items-center gap-2 rounded-xl bg-amber-500/10 px-2 py-1 text-xs"
+            >
+              <.cloaked_avatar
+                cloak={@cloak}
+                actor={%{name: @me.name, avatar_id: @me[:avatar_id]}}
+                class="size-6 text-[0.65rem]"
+              />
+              <span class="min-w-0 flex-1 truncate">
+                You are playing <span class="font-semibold">{@cloak.name}</span>
+              </span>
+              <button
+                id="take-off-cloak"
+                type="button"
+                phx-click="take_off_cloak"
+                class="rounded-md px-1.5 py-0.5 font-medium opacity-70 transition hover:bg-amber-500/20 hover:opacity-100"
+              >
+                Take off
+              </button>
+            </div>
+          </div>
+
           <.form
             :if={@current_scope}
             for={@form}
@@ -537,6 +634,25 @@ defmodule HoloChatWeb.ChatLive do
             phx-submit="send"
             class="flex gap-2 border-t border-base-300 px-3 pt-3"
           >
+            <button
+              id="wardrobe-toggle"
+              type="button"
+              phx-click={JS.toggle(to: "#wardrobe") |> JS.focus(to: "#wardrobe-search input")}
+              class={[
+                "grid size-10 shrink-0 place-items-center rounded-lg transition hover:bg-base-200",
+                @cloak && "bg-amber-500/10"
+              ]}
+              aria-label="Wardrobe"
+              title="Wardrobe: play a character"
+            >
+              <.avatar
+                :if={@cloak}
+                name={@cloak.name}
+                avatar_id={@cloak.avatar_id}
+                class="size-7 text-xs"
+              />
+              <.icon :if={!@cloak} name="hero-identification" class="size-5 opacity-70" />
+            </button>
             <div class="flex-1">
               <.input
                 field={@form[:body]}
@@ -591,31 +707,90 @@ defmodule HoloChatWeb.ChatLive do
             <.icon name="hero-x-mark" class="size-5" />
           </button>
 
-          <.avatar
-            name={@profile.name}
-            avatar_id={@profile.avatar_id}
-            assistant={@profile.assistant}
-            class="mx-auto size-24 text-3xl"
-          />
-          <h2 class="mt-3 flex items-center justify-center gap-2 text-lg font-semibold">
-            {@profile.name}
-            <span
-              :if={@profile.assistant}
-              data-role="assistant-badge"
-              class="rounded bg-violet-500/15 px-1 text-xs font-semibold tracking-wide text-violet-600"
-            >
-              AI
-            </span>
-          </h2>
-          <.markdown
-            :if={@profile.description}
-            text={@profile.description}
-            class="mt-2 text-left text-sm opacity-80"
-          />
-          <p :if={!@profile.description} class="mt-2 text-sm opacity-60">No description yet.</p>
+          <div :if={@profile.actor} class="space-y-5 text-left">
+            <section id="profile-actor" class="flex gap-3">
+              <.avatar
+                name={@profile.actor.name}
+                avatar_id={@profile.actor.avatar_id}
+                class="size-14 text-xl"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold tracking-wide uppercase opacity-60">Actor</p>
+                <h2 class="text-lg font-semibold">{@profile.actor.name}</h2>
+                <.markdown
+                  :if={@profile.actor.description}
+                  text={@profile.actor.description}
+                  class="mt-1 text-sm opacity-80"
+                />
+              </div>
+            </section>
+            <section id="profile-role" class="flex gap-3 rounded-xl bg-amber-500/10 p-3">
+              <.avatar name={@profile.name} avatar_id={@profile.avatar_id} class="size-14 text-xl" />
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-400">
+                  Acting as
+                </p>
+                <h2 class="text-lg font-semibold">{@profile.name}</h2>
+                <.markdown
+                  :if={@profile.description}
+                  text={@profile.description}
+                  class="mt-1 max-h-60 overflow-y-auto text-sm opacity-80"
+                />
+              </div>
+            </section>
+          </div>
+
+          <div :if={!@profile.actor}>
+            <.avatar
+              name={@profile.name}
+              avatar_id={@profile.avatar_id}
+              assistant={@profile.assistant}
+              class="mx-auto size-24 text-3xl"
+            />
+            <h2 class="mt-3 flex items-center justify-center gap-2 text-lg font-semibold">
+              {@profile.name}
+              <span
+                :if={@profile.assistant}
+                data-role="assistant-badge"
+                class="rounded bg-violet-500/15 px-1 text-xs font-semibold tracking-wide text-violet-600"
+              >
+                AI
+              </span>
+            </h2>
+            <.markdown
+              :if={@profile.description}
+              text={@profile.description}
+              class="mt-2 text-left text-sm opacity-80"
+            />
+            <p :if={!@profile.description} class="mt-2 text-sm opacity-60">No description yet.</p>
+          </div>
         </div>
       </div>
     </Layouts.app>
+    """
+  end
+
+  attr :cloak, :map, required: true, doc: "the worn character's name and avatar_id"
+  attr :actor, :map, required: true, doc: "the player's name and avatar_id"
+  attr :class, :any, default: "size-9 text-sm"
+
+  # The cloak in front, the player's own avatar peeking out behind it.
+  defp cloaked_avatar(assigns) do
+    ~H"""
+    <span class="flex -space-x-2">
+      <.avatar
+        name={@cloak.name}
+        avatar_id={@cloak.avatar_id}
+        class={["relative z-[1] ring-2 ring-amber-400/70", @class]}
+        data-role="cloak-avatar"
+      />
+      <.avatar
+        name={@actor.name}
+        avatar_id={@actor.avatar_id}
+        class={["opacity-90", @class]}
+        data-role="actor-avatar"
+      />
+    </span>
     """
   end
 
@@ -688,6 +863,8 @@ defmodule HoloChatWeb.ChatLive do
        show_scenario?: false
      )
      |> assign(:scenarios, %{})
+     |> assign(cloak: nil, wardrobe_results: [])
+     |> assign(:wardrobe_form, to_form(%{"query" => ""}, as: :wardrobe))
      |> assign(:room_form, to_form(%{"name" => ""}, as: :room))
      |> assign(:max_avatars, @max_avatars)
      |> assign(:me, presence_meta(socket.assigns.current_scope))
@@ -738,7 +915,8 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   defp enter_room(socket, room) do
-    me = %{socket.assigns.me | typing: false}
+    cloak = Rooms.get_cloak(socket.assigns.current_scope, room)
+    me = socket.assigns.me |> Map.put(:typing, false) |> put_cloak_meta(cloak)
 
     if connected?(socket) do
       Chat.subscribe(room)
@@ -750,6 +928,7 @@ defmodule HoloChatWeb.ChatLive do
 
     socket
     |> assign(:room, room)
+    |> assign(:cloak, cloak)
     |> assign(:page_title, "#" <> room)
     |> assign_scene(Rooms.get_room(room))
     |> assign(:show_scenario?, false)
@@ -792,7 +971,7 @@ defmodule HoloChatWeb.ChatLive do
   def handle_event("send", %{"message" => params}, socket) do
     %{current_scope: scope, room: room} = socket.assigns
 
-    case Chat.create_message(scope, room, params) do
+    case Rooms.post_message(scope, room, params) do
       {:ok, _message} ->
         # The message itself arrives via PubSub; just clear the composer.
         {:noreply, socket |> assign_message_form(%{}) |> set_typing(false)}
@@ -823,6 +1002,11 @@ defmodule HoloChatWeb.ChatLive do
      |> stream(:messages, Enum.reverse(older), at: 0)}
   end
 
+  def handle_event("show_profile", %{"user-id" => user_id, "cloak-id" => cloak_id}, socket)
+      when user_id != "" and cloak_id != "" do
+    {:noreply, assign(socket, :profile, cloaked_profile(user_id, cloak_id))}
+  end
+
   def handle_event("show_profile", %{"character-id" => id}, socket) when id != "" do
     {:noreply, assign(socket, :profile, character_profile(id))}
   end
@@ -836,6 +1020,45 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   def handle_event("show_profile", _params, socket), do: {:noreply, socket}
+
+  def handle_event("wardrobe_search", %{"wardrobe" => %{"query" => query}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:wardrobe_form, to_form(%{"query" => query}, as: :wardrobe))
+     |> assign(:wardrobe_results, Characters.search_characters(query, [], 8))}
+  end
+
+  def handle_event("wear", %{"id" => id}, socket) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Rooms.wear_character(scope, room, id) do
+      {:ok, character} ->
+        {:noreply, put_cloak(socket, character)}
+
+      {:error, :taken} ->
+        {:noreply, put_flash(socket, :error, "Someone here is already wearing that character.")}
+
+      {:error, :cast} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "The AI plays this character here, and the game masters keep it that way."
+         )}
+
+      {:error, _not_found_or_guest} ->
+        {:noreply, put_flash(socket, :error, "That character can't be worn.")}
+    end
+  end
+
+  def handle_event("take_off_cloak", _params, socket) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Rooms.take_off_cloak(scope, room) do
+      :ok -> {:noreply, put_cloak(socket, nil)}
+      {:error, :unauthorized} -> {:noreply, socket}
+    end
+  end
 
   def handle_event("toggle_scenario", _params, socket),
     do: {:noreply, update(socket, :show_scenario?, &(not &1))}
@@ -903,6 +1126,18 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   def handle_info({:room_updated, _scene}, socket), do: {:noreply, socket}
+
+  # Others' cloaks show through presence. Ours may have changed elsewhere
+  # (another tab): show it and pass it on to presence.
+  def handle_info({:cloak_changed, user_id}, socket) do
+    case socket.assigns.current_scope do
+      %{user: %{id: ^user_id}} = scope ->
+        {:noreply, put_cloak(socket, Rooms.get_cloak(scope, socket.assigns.room))}
+
+      _someone_else ->
+        {:noreply, socket}
+    end
+  end
 
   # Edits of the scenario this room plays show up in the scene header.
   def handle_info({:scenario_updated, scenario}, socket) do
@@ -980,6 +1215,29 @@ defmodule HoloChatWeb.ChatLive do
     |> restart_typing_timer(typing?)
   end
 
+  defp put_cloak(socket, cloak) do
+    me = put_cloak_meta(socket.assigns.me, cloak)
+    if connected?(socket), do: Presence.update_user(socket.assigns.room, socket.id, me)
+
+    socket
+    |> assign(:cloak, cloak)
+    |> assign(:me, me)
+  end
+
+  # Guests can't wear cloaks.
+  defp put_cloak_meta(%{name: nil} = me, _cloak), do: me
+
+  defp put_cloak_meta(me, nil),
+    do: Map.merge(me, %{cloak_id: nil, cloak_name: nil, cloak_avatar_id: nil})
+
+  defp put_cloak_meta(me, cloak),
+    do:
+      Map.merge(me, %{
+        cloak_id: cloak.id,
+        cloak_name: cloak.name,
+        cloak_avatar_id: cloak.avatar_id
+      })
+
   defp restart_typing_timer(socket, typing?) do
     if timer = socket.assigns.typing_timer, do: Process.cancel_timer(timer)
     timer = if typing?, do: Process.send_after(self(), :typing_timeout, @typing_timeout)
@@ -998,13 +1256,16 @@ defmodule HoloChatWeb.ChatLive do
           user_id: meta[:user_id],
           persona_id: meta[:persona_id],
           character_id: meta[:character_id],
-          assistant: meta[:assistant] == true
+          assistant: meta[:assistant] == true,
+          cloak:
+            meta[:cloak_id] &&
+              %{id: meta.cloak_id, name: meta.cloak_name, avatar_id: meta.cloak_avatar_id}
         }
       end
 
     typing_names =
       for {key, %{typing: true} = meta} <- users, key != socket.id, uniq: true do
-        meta.name || "Someone"
+        meta[:cloak_name] || meta.name || "Someone"
       end
 
     socket
@@ -1031,8 +1292,17 @@ defmodule HoloChatWeb.ChatLive do
           name: profile.username,
           avatar_id: profile.avatar_id,
           description: profile.description,
-          assistant: false
+          assistant: false,
+          actor: nil
         }
+    end
+  end
+
+  # A player in a cloak: both the player and the character they play.
+  defp cloaked_profile(user_id, character_id) do
+    with %{} = actor <- user_profile(user_id),
+         %{} = role <- character_profile(character_id) do
+      %{role | actor: actor}
     end
   end
 
@@ -1046,7 +1316,8 @@ defmodule HoloChatWeb.ChatLive do
           name: character.name,
           avatar_id: character.avatar_id,
           description: character.description,
-          assistant: false
+          assistant: false,
+          actor: nil
         }
     end
   end
@@ -1062,7 +1333,8 @@ defmodule HoloChatWeb.ChatLive do
           name: persona.name,
           avatar_id: persona.avatar_id,
           description: persona.description,
-          assistant: true
+          assistant: true,
+          actor: nil
         }
     end
   end
@@ -1131,24 +1403,54 @@ defmodule HoloChatWeb.ChatLive do
   # Who wrote a message, as shown now: people by their current profile,
   # personas by their current avatar, characters by their current sheet.
   # Legacy messages and deleted characters have no profile.
+  # A player in a cloak: the character, played by the player (`actor`).
+  defp author(
+         %{from_assistant: false, character_id: id, user: %{} = user} = message,
+         personas,
+         characters
+       )
+       when is_integer(id) do
+    case characters[id] do
+      nil ->
+        author(%{message | character_id: nil}, personas, characters)
+
+      character ->
+        %{
+          name: character.name,
+          avatar_id: character.avatar_id,
+          profile?: true,
+          actor: %{name: message.username, avatar_id: user.avatar_id}
+        }
+    end
+  end
+
   defp author(%{character_id: id} = message, _personas, characters) when is_integer(id) do
     case characters[id] do
-      nil -> %{name: message.username, avatar_id: nil, profile?: false}
-      character -> %{name: character.name, avatar_id: character.avatar_id, profile?: true}
+      nil ->
+        %{name: message.username, avatar_id: nil, profile?: false, actor: nil}
+
+      character ->
+        %{name: character.name, avatar_id: character.avatar_id, profile?: true, actor: nil}
     end
   end
 
   defp author(%{persona_id: id} = message, personas, _characters) when is_integer(id) do
     persona = personas[id]
-    %{name: message.username, avatar_id: persona && persona.avatar_id, profile?: persona != nil}
+
+    %{
+      name: message.username,
+      avatar_id: persona && persona.avatar_id,
+      profile?: persona != nil,
+      actor: nil
+    }
   end
 
   defp author(%{user: %{avatar_id: avatar_id}} = message, _personas, _characters) do
-    %{name: message.username, avatar_id: avatar_id, profile?: true}
+    %{name: message.username, avatar_id: avatar_id, profile?: true, actor: nil}
   end
 
   defp author(message, _personas, _characters),
-    do: %{name: message.username, avatar_id: nil, profile?: false}
+    do: %{name: message.username, avatar_id: nil, profile?: false, actor: nil}
 
   defp typing_text([name]), do: "#{name} is typing…"
   defp typing_text([a, b]), do: "#{a} and #{b} are typing…"

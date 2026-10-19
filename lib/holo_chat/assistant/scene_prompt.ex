@@ -19,15 +19,34 @@ defmodule HoloChat.Assistant.ScenePrompt do
   The character's own messages are assistant turns; everything else is
   merged into user turns of "Name: message" lines, which keeps turns
   alternating as strict chat templates require.
+
+  `worn` maps character ids to the characters players wore when writing
+  their messages: those players appear as their character, played by a
+  human.
   """
-  def build(room, character, cast, history) do
-    history = since_scenario_change(history)
+  def build(room, character, cast, history, worn \\ %{}) do
+    history =
+      history
+      |> since_scenario_change()
+      |> Enum.map(&Map.put(&1, :speaker, speaker(&1, worn)))
 
     [
       %{role: "system", content: system_prompt(room, character, cast, history)}
       | turns(character, history)
     ]
   end
+
+  # Who a message is from as the scene sees it, and their character, if a
+  # player wore one.
+  defp speaker(%{from_assistant: false, character_id: id, username: username}, worn)
+       when is_integer(id) do
+    case worn[id] do
+      nil -> {username, nil}
+      character -> {character.name, character}
+    end
+  end
+
+  defp speaker(%{username: username}, _worn), do: {username, nil}
 
   defp system_prompt(room, character, cast, history) do
     name = character.name
@@ -69,12 +88,17 @@ defmodule HoloChat.Assistant.ScenePrompt do
       end
 
     players =
-      for %{character_id: nil, persona_id: nil, from_assistant: false, username: player} <-
-            history,
+      for %{persona_id: nil, from_assistant: false, speaker: speaker} <- history,
           uniq: true,
-          do: "- #{player} (a player)"
+          do: player_line(speaker)
 
     characters ++ players
+  end
+
+  defp player_line({name, nil}), do: "- #{name} (a player)"
+
+  defp player_line({name, character}) do
+    "- #{name} (played by a human player)" <> summary(character.description)
   end
 
   # The first sentence of a description, so others are known but brief.
@@ -104,8 +128,11 @@ defmodule HoloChat.Assistant.ScenePrompt do
   defp turns(character, history) do
     history
     |> Enum.map(fn
-      %{character_id: id, body: body} when id == character.id -> {"assistant", body}
-      %{username: name, body: body} -> {"user", "#{name}: #{body}"}
+      %{from_assistant: true, character_id: id, body: body} when id == character.id ->
+        {"assistant", body}
+
+      %{speaker: {name, _character}, body: body} ->
+        {"user", "#{name}: #{body}"}
     end)
     |> Enum.chunk_by(fn {role, _content} -> role end)
     |> Enum.map(fn [{role, _} | _] = chunk ->

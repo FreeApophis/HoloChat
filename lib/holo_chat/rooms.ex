@@ -6,6 +6,10 @@ defmodule HoloChat.Rooms do
   A role-play room has one. It plays one scenario from the library (see
   `HoloChat.Scenarios`) at a time with its own cast, and its game masters
   can switch to another scenario; each switch is announced in the chat.
+
+  In any room, chat or role-play, a player can wear a library character as
+  a cloak: they then post under its name and avatar. Whether a player may
+  take over a character the AI plays in the room is the game masters' call.
   """
 
   use Boundary,
@@ -23,7 +27,7 @@ defmodule HoloChat.Rooms do
   alias HoloChat.{Accounts, Characters, Chat, Scenarios}
   alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Repo
-  alias HoloChat.Rooms.{CastMember, GameMaster, Room}
+  alias HoloChat.Rooms.{CastMember, Cloak, GameMaster, Room}
 
   @pubsub HoloChat.PubSub
   @scenes_topic "scenes"
@@ -47,8 +51,9 @@ defmodule HoloChat.Rooms do
   def subscribe_scenes, do: Phoenix.PubSub.subscribe(@pubsub, @scenes_topic)
 
   @doc """
-  Returns every role-play room that has a cast, as `{room, cast}` pairs.
-  Rooms come with their scenario.
+  Returns every role-play room that has a cast, as `{room, cast}` pairs,
+  where the cast is the one the AI plays (see `list_ai_cast/1`). Rooms come
+  with their scenario.
   """
   def list_staged_scenes do
     rooms =
@@ -60,7 +65,7 @@ defmodule HoloChat.Rooms do
           preload: :scenario
       )
 
-    Enum.map(rooms, &{&1, list_cast(&1)})
+    Enum.map(rooms, &{&1, list_ai_cast(&1)})
   end
 
   @doc """
@@ -348,7 +353,119 @@ defmodule HoloChat.Rooms do
     end)
   end
 
-    defp cast_ids(%Room{id: room_id}) do
+  @doc """
+  Returns the characters the AI plays in the room: the cast, except the
+  characters players wear there.
+  """
+  def list_ai_cast(%Room{} = room) do
+    worn = Repo.all(from c in Cloak, where: c.room == ^room.name, select: c.character_id)
+    room |> cast_ids() |> Enum.reject(&(&1 in worn)) |> Characters.list_characters_by_ids()
+  end
+
+  ## Cloaks
+
+  @doc """
+  Puts on the library character `character_id` as the scope's cloak in the
+  room called `name`, replacing any other cloak there, and announces it.
+
+  Returns `{:error, :taken}` if another player wears it there, and
+  `{:error, :cast}` if the AI plays it there and the game masters forbid
+  taking it over.
+  """
+  def wear_character(%Scope{user: %User{} = user}, name, character_id) do
+    with %{} = character <- Characters.get_character(character_id) || {:error, :not_found},
+         :ok <- check_cloak_policy(name, character),
+         {:ok, _cloak} <- put_cloak(user, name, character) do
+      broadcast_cloak(name, user)
+      {:ok, character}
+    end
+  end
+
+  def wear_character(_scope, _name, _character_id), do: {:error, :unauthorized}
+
+  defp check_cloak_policy(name, character) do
+    case get_room(name) do
+      %Room{cloak_policy: "forbid"} = room ->
+        if character.id in cast_ids(room), do: {:error, :cast}, else: :ok
+
+      _takeover_or_chat_room ->
+        :ok
+    end
+  end
+
+  defp put_cloak(user, name, character) do
+    %Cloak{user_id: user.id, room: name, character_id: character.id}
+    |> Cloak.changeset()
+    |> Repo.insert(
+      on_conflict: {:replace, [:character_id, :updated_at]},
+      conflict_target: [:user_id, :room]
+    )
+    |> case do
+      {:ok, cloak} -> {:ok, cloak}
+      {:error, _changeset} -> {:error, :taken}
+    end
+  end
+
+  @doc """
+  Takes off the scope's cloak in the room called `name`, and announces it.
+  """
+  def take_off_cloak(%Scope{user: %User{} = user}, name) do
+    Repo.delete_all(from c in Cloak, where: c.user_id == ^user.id and c.room == ^name)
+    broadcast_cloak(name, user)
+    :ok
+  end
+
+  def take_off_cloak(_scope, _name), do: {:error, :unauthorized}
+
+  @doc """
+  Returns the character the scope wears in the room called `name`, or nil.
+  """
+  def get_cloak(%Scope{user: %User{id: user_id}}, name) do
+    Repo.one(
+      from ch in Characters.Character,
+        join: c in Cloak,
+        on: c.character_id == ch.id,
+        where: c.user_id == ^user_id and c.room == ^name
+    )
+  end
+
+  def get_cloak(_scope, _name), do: nil
+
+  @doc """
+  Returns the characters worn in the room called `name`, by user id.
+  """
+  def list_cloaks(name) do
+    cloaks = Repo.all(from c in Cloak, where: c.room == ^name)
+
+    characters =
+      Map.new(
+        Characters.list_characters_by_ids(Enum.map(cloaks, & &1.character_id)),
+        &{&1.id, &1}
+      )
+
+    Map.new(cloaks, &{&1.user_id, characters[&1.character_id]})
+  end
+
+  @doc """
+  Posts a message in the room called `name` as the scope's user, in the
+  name of the character they wear there (if any). See
+  `HoloChat.Chat.create_message/4`.
+  """
+  def post_message(scope, name, attrs) do
+    case get_cloak(scope, name) do
+      nil -> Chat.create_message(scope, name, attrs)
+      character -> Chat.create_message(scope, name, attrs, character_id: character.id)
+    end
+  end
+
+  # Room subscribers update the player's look; the assistant reloads the
+  # cast it plays, since a player may have taken over a character.
+  defp broadcast_cloak(name, user) do
+    Phoenix.PubSub.broadcast(@pubsub, topic(name), {:cloak_changed, user.id})
+    Phoenix.PubSub.broadcast(@pubsub, @scenes_topic, {:scene_changed, name})
+  end
+
+  defp cast_ids(%Room{id: room_id}) do
     Repo.all(from cm in CastMember, where: cm.room_id == ^room_id, select: cm.character_id)
   end
 

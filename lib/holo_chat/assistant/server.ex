@@ -27,7 +27,7 @@ defmodule HoloChat.Assistant.Server do
 
   require Logger
 
-  alias HoloChat.{Assistant, Chat, Rooms}
+  alias HoloChat.{Assistant, Characters, Chat, Rooms}
   alias HoloChat.Assistant.{Director, LLM, ScenePrompt}
 
   @max_queue 10
@@ -169,7 +169,8 @@ defmodule HoloChat.Assistant.Server do
   end
 
   # A character spoke: count the turn and let a character it named answer.
-  defp scene_message(state, scene, %{character_id: id} = message) when is_integer(id) do
+  defp scene_message(state, scene, %{from_assistant: true, character_id: id} = message)
+       when is_integer(id) do
     scene = %{scene | streak: scene.streak + 1, last_speaker_id: id}
     state = put_scene(state, scene)
 
@@ -278,27 +279,36 @@ defmodule HoloChat.Assistant.Server do
   end
 
   # The scene, cast and history are read when the turn starts, so the
-  # character sees everything said while it waited in the queue.
+  # character sees everything said while it waited in the queue. A player
+  # may have put the character on meanwhile; then it is no longer the AI's.
   defp generate(endpoint_url, {:character, room_name, character}) do
     with %{} = room <- Rooms.get_room(room_name) || {:error, :no_scene},
-         cast = Rooms.list_cast(room),
+         cast = Rooms.list_ai_cast(room),
          %{} = character <- Enum.find(cast, &(&1.id == character.id)) || {:error, :not_cast},
          history = Chat.list_recent_messages(room_name, @scene_history),
-         prompt = ScenePrompt.build(room, character, cast, history),
+         worn = worn_characters(history),
+         prompt = ScenePrompt.build(room, character, cast, history, worn),
          {:ok, text} <-
            LLM.impl().chat(endpoint_url, prompt,
              max_tokens: @scene_max_tokens,
              temperature: @scene_temperature
            ) do
-      case ScenePrompt.clean(text, character, other_names(character, cast, history)) do
+      case ScenePrompt.clean(text, character, other_names(character, cast, history, worn)) do
         nil -> {:error, :empty_reply}
         reply -> {:ok, reply}
       end
     end
   end
 
-  defp other_names(character, cast, history) do
+  # The characters players wore when writing their messages.
+  defp worn_characters(history) do
+    ids = for %{from_assistant: false, character_id: id} <- history, is_integer(id), do: id
+    Map.new(Characters.list_characters_by_ids(Enum.uniq(ids)), &{&1.id, &1})
+  end
+
+  defp other_names(character, cast, history, worn) do
     for(other <- cast, other.id != character.id, do: other.name) ++
+      for(%{name: name} <- Map.values(worn), name != character.name, do: name) ++
       for(
         message <- history,
         message.username != character.name,

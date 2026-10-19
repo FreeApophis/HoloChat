@@ -10,6 +10,8 @@ defmodule HoloChat.Rooms.Room do
     field :reply_policy, :string, default: "natural"
     field :reply_delay, :integer, default: 4
     field :max_ai_turns, :integer, default: 2
+    # When a player wears a character the AI plays here: "takeover" or "forbid".
+    field :cloak_policy, :string, default: "takeover"
     belongs_to :scenario, HoloChat.Scenarios.Scenario
 
     timestamps(type: :utc_datetime)
@@ -31,12 +33,14 @@ defmodule HoloChat.Rooms.Room do
   end
 
   @doc """
-  Changeset for the settings the game masters edit: how the cast takes turns.
+  Changeset for the settings the game masters edit: how the cast takes turns
+  and whether players may wear the cast's characters.
   """
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:reply_policy, :reply_delay, :max_ai_turns])
+    |> cast(attrs, [:reply_policy, :reply_delay, :max_ai_turns, :cloak_policy])
     |> validate_inclusion(:reply_policy, ~w(natural mention))
+    |> validate_inclusion(:cloak_policy, ~w(takeover forbid))
     |> validate_number(:reply_delay, greater_than_or_equal_to: 0, less_than_or_equal_to: 60)
     |> validate_number(:max_ai_turns, greater_than_or_equal_to: 1, less_than_or_equal_to: 5)
   end

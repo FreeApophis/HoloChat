@@ -242,6 +242,17 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "create_message/4" do
+    test "records the character a player wears", %{scope: scope, room: room} do
+      %{id: id} = character_fixture(scope)
+
+      assert {:ok, %Message{character_id: ^id, from_assistant: false} = message} =
+               Chat.create_message(scope, room, %{"body" => "In costume."}, character_id: id)
+
+      assert message.user_id == scope.user.id
+    end
+  end
+
   describe "create_scenario_message/4" do
     test "announces a scenario change in the room, by the scope's user",
          %{scope: scope, room: room} do

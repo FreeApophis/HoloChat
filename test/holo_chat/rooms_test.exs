@@ -369,4 +369,103 @@ defmodule HoloChat.RoomsTest do
       assert_receive {:scene_changed, ^name}
     end
   end
+
+  describe "cloaks" do
+    setup do
+      player = user_scope_fixture()
+      riker = character_fixture(user_scope_fixture(), %{"name" => "Riker"})
+      %{player: player, riker: riker, room: unique_room()}
+    end
+
+    test "a player wears a character in one room, then takes it off",
+         %{player: player, riker: riker, room: room} do
+      Rooms.subscribe(room)
+
+      assert {:ok, %{id: id}} = Rooms.wear_character(player, room, riker.id)
+      assert id == riker.id
+      assert_receive {:cloak_changed, user_id}
+      assert user_id == player.user.id
+
+      assert %{name: "Riker"} = Rooms.get_cloak(player, room)
+      assert Rooms.get_cloak(player, unique_room()) == nil
+      assert %{^user_id => %{name: "Riker"}} = Rooms.list_cloaks(room)
+
+      assert :ok = Rooms.take_off_cloak(player, room)
+      assert Rooms.get_cloak(player, room) == nil
+      assert_receive {:cloak_changed, ^user_id}
+    end
+
+    test "wearing another character replaces the cloak", %{
+      player: player,
+      riker: riker,
+      room: room
+    } do
+      troi = character_fixture(player, %{"name" => "Troi"})
+      {:ok, _} = Rooms.wear_character(player, room, riker.id)
+      {:ok, _} = Rooms.wear_character(player, room, troi.id)
+
+      assert %{name: "Troi"} = Rooms.get_cloak(player, room)
+    end
+
+    test "a character is worn by one player per room", %{player: player, riker: riker, room: room} do
+      {:ok, _} = Rooms.wear_character(player, room, riker.id)
+
+      assert {:error, :taken} = Rooms.wear_character(user_scope_fixture(), room, riker.id)
+      assert {:ok, _} = Rooms.wear_character(user_scope_fixture(), unique_room(), riker.id)
+    end
+
+    test "guests and unknown characters are refused", %{riker: riker, room: room} do
+      assert {:error, :unauthorized} = Rooms.wear_character(nil, room, riker.id)
+      assert {:error, :not_found} = Rooms.wear_character(user_scope_fixture(), room, "-1")
+    end
+
+    test "post_message/3 posts in the worn character's name",
+         %{player: player, riker: riker, room: room} do
+      {:ok, plain} = Rooms.post_message(player, room, %{"body" => "Me."})
+      {:ok, _} = Rooms.wear_character(player, room, riker.id)
+      {:ok, cloaked} = Rooms.post_message(player, room, %{"body" => "Riker."})
+
+      assert plain.character_id == nil
+      assert cloaked.character_id == riker.id
+      assert cloaked.user_id == player.user.id
+      refute cloaked.from_assistant
+    end
+  end
+
+  describe "cloaks and the AI cast" do
+    setup do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+      riker = character_fixture(gm)
+      troi = character_fixture(gm)
+      {:ok, _} = Rooms.cast_character(gm, room, riker.id)
+      {:ok, _} = Rooms.cast_character(gm, room, troi.id)
+      %{gm: gm, room: room, riker: riker, troi: troi}
+    end
+
+    test "by default a player takes a character over from the AI",
+         %{room: room, riker: riker, troi: troi} do
+      Rooms.subscribe_scenes()
+      {:ok, _} = Rooms.wear_character(user_scope_fixture(), room.name, riker.id)
+
+      name = room.name
+      assert_receive {:scene_changed, ^name}
+      assert Enum.map(Rooms.list_ai_cast(room), & &1.id) == [troi.id]
+      assert length(Rooms.list_cast(room)) == 2
+
+      scenes = Map.new(Rooms.list_staged_scenes(), fn {r, cast} -> {r.id, cast} end)
+      assert Enum.map(scenes[room.id], & &1.id) == [troi.id]
+    end
+
+    test "game masters can forbid wearing the AI's characters",
+         %{gm: gm, room: room, riker: riker} do
+      assert room.cloak_policy == "takeover"
+      {:ok, room} = Rooms.update_room(gm, room, %{"cloak_policy" => "forbid"})
+
+      assert {:error, :cast} = Rooms.wear_character(user_scope_fixture(), room.name, riker.id)
+
+      assert {:error, changeset} = Rooms.update_room(gm, room, %{"cloak_policy" => "chaos"})
+      assert %{cloak_policy: [_]} = errors_on(changeset)
+    end
+  end
 end

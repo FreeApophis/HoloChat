@@ -67,6 +67,26 @@ defmodule HoloChat.Assistant.ScenePromptTest do
       refute system.content =~ "gm (a player)"
     end
 
+    test "shows players by the character they wear, played by a human" do
+      riker = %Character{id: 3, name: "Riker", description: "First officer. Tall."}
+      history = [%Message{username: "ada", body: "Hello.", user_id: 9, character_id: riker.id}]
+
+      [system | turns] = ScenePrompt.build(@room, @luna, [@luna], history, %{riker.id => riker})
+
+      assert system.content =~ "- Riker (played by a human player): First officer."
+      refute system.content =~ "ada"
+      assert turns == [%{role: "user", content: "Riker: Hello."}]
+    end
+
+    test "only the model's own messages are the character's turns" do
+      # A player once wore Luna; that was not the model speaking.
+      history = [%Message{username: "ada", body: "As Luna.", user_id: 9, character_id: @luna.id}]
+
+      [_system | turns] = ScenePrompt.build(@room, @luna, [@luna], history, %{@luna.id => @luna})
+
+      assert turns == [%{role: "user", content: "Luna: As Luna."}]
+    end
+
     test "never ends on the character's own turn" do
       [_system | turns] = ScenePrompt.build(@room, @luna, [@luna], [character(@luna, "Hm.")])
 

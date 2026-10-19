@@ -112,9 +112,19 @@ defmodule HoloChat.Chat do
   @doc """
   Creates a message in `room` as the scope's user and broadcasts it to the
   room's subscribers. Guests (no user in scope) may not post.
+
+  Pass `character_id:` for the character the user wears in the room (see
+  `HoloChat.Rooms.post_message/3`).
   """
-  def create_message(%Scope{user: %User{} = user}, room, attrs) do
-    %Message{room: room, user_id: user.id, username: user.username}
+  def create_message(scope, room, attrs, opts \\ [])
+
+  def create_message(%Scope{user: %User{} = user}, room, attrs, opts) do
+    %Message{
+      room: room,
+      user_id: user.id,
+      username: user.username,
+      character_id: opts[:character_id]
+    }
     |> Message.changeset(attrs)
     |> Repo.insert()
     |> case do
@@ -128,7 +138,7 @@ defmodule HoloChat.Chat do
     end
   end
 
-  def create_message(_scope, _room, _attrs), do: {:error, :unauthorized}
+  def create_message(_scope, _room, _attrs, _opts), do: {:error, :unauthorized}
 
   @doc """
   Announces in `room` that it now plays the scenario `scenario_id`, as the

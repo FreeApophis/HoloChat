@@ -204,6 +204,50 @@ defmodule HoloChatWeb.SceneRepliesTest do
     refute_receive :llm_called, 300
   end
 
+  describe "a player wearing a character" do
+    test "is seen in the prompt as that character, played by a human",
+         %{gm: gm, room: room} do
+      riker =
+        character_fixture(gm, %{"name" => "Will Riker", "description" => "First officer. Tall."})
+
+      start_server()
+      {player, view} = join(room)
+      {:ok, _} = Rooms.wear_character(user_scope_fixture(player), room.name, riker.id)
+
+      expect(LLMMock, :chat, fn _url, messages, _opts ->
+        system = hd(messages).content
+        assert system =~ "Will Riker (played by a human player): First officer."
+        refute system =~ "#{player.username} (a player)"
+        assert List.last(messages).content == "Will Riker: Hello, Luna."
+        {:ok, "Hello, Commander."}
+      end)
+
+      view |> form("#message-form", message: %{body: "Hello, Luna."}) |> render_submit()
+
+      assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+    end
+
+    test "takes the character over from the AI", %{room: room, luna: luna} do
+      start_server()
+      await_presence(%{name: "Luna Lovegood"})
+      {player, view} = join(room)
+      {:ok, _} = Rooms.wear_character(user_scope_fixture(player), room.name, luna.id)
+
+      await_presence_leave(%{character_id: luna.id})
+      refute has_element?(view, "#online-users [data-character-id='#{luna.id}']")
+
+      test = self()
+
+      stub(LLMMock, :chat, fn _url, _messages, _opts ->
+        send(test, :llm_called)
+        {:ok, "Hm."}
+      end)
+
+      view |> form("#message-form", message: %{body: "Anyone here, Luna?"}) |> render_submit()
+      refute_receive :llm_called, 300
+    end
+  end
+
   test "game masters choose how the cast takes turns", %{room: room} do
     conn = build_conn_with_unique_ip() |> log_in_user(gm_user(room))
     {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")

@@ -116,6 +116,15 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
               Characters wait until the players have been quiet this long. A character who
               names another lets that one answer, up to the number of AI turns in a row.
             </p>
+            <.input
+              field={@form[:cloak_policy]}
+              type="select"
+              label="When a player wants to wear a cast character"
+              options={[
+                {"The player takes over; the AI steps aside while they wear it", "takeover"},
+                {"Not allowed: the cast belongs to the AI", "forbid"}
+              ]}
+            />
           </fieldset>
 
           <.button variant="primary" phx-disable-with="Saving…">Save settings</.button>

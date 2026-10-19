@@ -36,6 +36,26 @@ defmodule HoloChatWeb.PresenceHelpers do
   end
 
   @doc """
+  Like `await_presence/1`, but waits for someone with `expected` metadata
+  to leave.
+  """
+  def await_presence_leave(expected) do
+    receive do
+      %Broadcast{event: "presence_diff", payload: %{leaves: leaves}} ->
+        if Enum.any?(leaves, fn {_key, %{metas: metas}} ->
+             Enum.any?(metas, &matches?(&1, expected))
+           end) do
+          :sys.get_state(Shard.name_for_number(Presence, 0))
+          :ok
+        else
+          await_presence_leave(expected)
+        end
+    after
+      1000 -> flunk("no presence_diff with #{inspect(expected)} leaving")
+    end
+  end
+
+  @doc """
   Waits until all async presence fetchers have finished. Use in `on_exit`.
   """
   def await_presence_fetchers do
