@@ -57,8 +57,6 @@ defmodule HoloChatWeb.Router do
       # Managing scenes needs an account; game master rights are checked in
       # the LiveView, since they are per scene.
       live "/rooms/:room/settings", RoleplayLive.Settings, :edit
-      # Scenes waiting for a channel have no room name yet.
-      live "/scenes/:id/settings", RoleplayLive.Settings, :edit
 
       # Declared before the public /characters/:id so "new" is not an id.
       live "/characters/new", CharacterLive.Form, :new

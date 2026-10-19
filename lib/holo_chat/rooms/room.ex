@@ -18,30 +18,18 @@ defmodule HoloChat.Rooms.Room do
   end
 
   @doc """
-  Changeset for a new scene: the first scenario is picked, and optionally the
-  channel it plays in (its name). Later scenarios are switched to, see
+  Changeset for a new room: the name is chosen once and never changes, and
+  the first scenario is picked. Later scenarios are switched to, see
   `HoloChat.Rooms.switch_scenario/3`.
   """
   def create_changeset(room, attrs) do
     room
     |> cast(attrs, [:name, :scenario_id])
     |> update_change(:name, &String.trim/1)
-    |> validate_required([:scenario_id])
+    |> validate_required([:name, :scenario_id])
     |> unique_constraint(:name, message: "is already taken")
     |> foreign_key_constraint(:scenario_id, message: "does not exist")
     |> changeset(attrs)
-  end
-
-  @doc """
-  Changeset for starting a waiting scene in a channel. The name is chosen
-  once and never changes.
-  """
-  def channel_changeset(room, attrs) do
-    room
-    |> cast(attrs, [:name])
-    |> update_change(:name, &String.trim/1)
-    |> validate_required([:name])
-    |> unique_constraint(:name, message: "is already taken")
   end
 
   @doc """

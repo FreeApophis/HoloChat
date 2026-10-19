@@ -82,100 +82,98 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
-  describe "scenes waiting for a channel" do
+  describe "start_scenario/3" do
     setup do
       gm = user_scope_fixture()
       scenario = scenario_fixture(gm, %{"title" => "Risa"})
-      character = character_fixture(gm)
-      {:ok, _} = Scenarios.cast_character(gm, scenario, character.id)
-      {:ok, scene} = Rooms.create_roleplay_room(gm, %{"scenario_id" => scenario.id})
-      %{gm: gm, scene: scene, scenario: scenario, character: character}
+      %{gm: gm, scenario: scenario}
     end
 
-    test "are created without a name, with their game master and cast",
-         %{gm: gm, scene: scene, character: character} do
-      assert scene.name == nil
-      assert Rooms.game_master?(gm, scene)
-      assert [%{id: id}] = Rooms.list_cast(scene)
-      assert id == character.id
-    end
-
-    test "stay out of everything keyed by channel", %{scene: scene} do
-      refute nil in Rooms.roleplay_room_names()
-      refute Enum.any?(Rooms.list_roleplay_rooms(), &(&1.id == scene.id))
-      refute Enum.any?(Rooms.list_staged_scenes(), fn {room, _cast} -> room.id == scene.id end)
-    end
-
-    test "get_scene/1 finds a scene by id with its scenario, or nil", %{scene: scene} do
-      assert %Room{scenario: %Scenario{title: "Risa"}} = Rooms.get_scene(scene.id)
-      assert Rooms.get_scene("#{scene.id}").id == scene.id
-      assert Rooms.get_scene("-1") == nil
-      assert Rooms.get_scene("nope") == nil
-    end
-
-    test "start_scene/3 plays the scene in a channel and announces its scenario",
-         %{gm: gm, scene: scene, scenario: scenario} do
+    test "opens a scene in a new channel, with the scope's user as game master",
+         %{gm: gm, scenario: scenario} do
       name = unique_room()
       Chat.subscribe(name)
-      Rooms.subscribe_scenes()
 
-      assert {:ok, %Room{name: ^name, scenario: %Scenario{title: "Risa"}}} =
-               Rooms.start_scene(gm, scene, %{"name" => name})
+      assert {:ok, %Room{name: ^name, scenario: %Scenario{title: "Risa"}} = room} =
+               Rooms.start_scenario(gm, name, scenario.id)
 
-      assert_receive {:new_message, %{kind: "scenario", scenario_id: scenario_id}}
-      assert scenario_id == scenario.id
-      assert_receive {:scene_changed, ^name}
-      assert Rooms.get_room(name).id == scene.id
-      assert name in Rooms.roleplay_room_names()
+      assert Rooms.game_master?(gm, room)
+      assert_receive {:new_message, %{kind: "scenario"}}
     end
 
-    test "start_scene/3 refuses taken names, players and started scenes",
-         %{gm: gm, scene: scene} do
+    test "switches the scenario of a room its game masters run", %{gm: gm, scenario: scenario} do
+      room = roleplay_room_fixture(gm)
+
+      assert {:ok, %Room{scenario_id: id}} = Rooms.start_scenario(gm, room.name, scenario.id)
+      assert id == scenario.id
+      assert Rooms.get_room(room.name).id == room.id
+    end
+
+    test "refuses rooms run by other game masters", %{scenario: scenario} do
+      room = roleplay_room_fixture(user_scope_fixture())
+
+      assert {:error, :unauthorized} =
+               Rooms.start_scenario(user_scope_fixture(), room.name, scenario.id)
+    end
+
+    test "leaves chat rooms without a game master and the lobby to admins",
+         %{gm: gm, scenario: scenario} do
       chat_room = unique_room()
       message_fixture(gm, chat_room)
 
       for name <- [chat_room, "lobby"] do
-        assert {:error, changeset} = Rooms.start_scene(gm, scene, %{"name" => name})
+        assert {:error, changeset} = Rooms.start_scenario(gm, name, scenario.id)
         assert %{name: ["is already taken"]} = errors_on(changeset)
       end
 
-      assert {:error, changeset} = Rooms.start_scene(gm, scene, %{"name" => ""})
-      assert %{name: ["can't be blank"]} = errors_on(changeset)
-
-      assert {:error, :unauthorized} =
-               Rooms.start_scene(user_scope_fixture(), scene, %{"name" => unique_room()})
-
-      {:ok, started} = Rooms.start_scene(gm, scene, %{"name" => unique_room()})
-
-      assert {:error, :already_started} =
-               Rooms.start_scene(gm, started, %{"name" => unique_room()})
-    end
-
-    test "start_scene/3 lets admins take over a chat room", %{scene: scene} do
-      chat_room = unique_room()
-      message_fixture(user_scope_fixture(), chat_room)
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
 
       assert {:ok, %Room{name: ^chat_room}} =
-               Rooms.start_scene(user_scope_fixture(admin), scene, %{"name" => chat_room})
+               Rooms.start_scenario(user_scope_fixture(admin), chat_room, scenario.id)
     end
 
-    test "start_scene/3 announces nothing for a scene whose scenario ended",
-         %{gm: gm, scene: scene} do
-      {:ok, scene} = Rooms.end_scenario(gm, scene)
+    test "refuses unknown scenarios in a room", %{gm: gm} do
+      room = roleplay_room_fixture(gm)
+      assert {:error, :not_found} = Rooms.start_scenario(gm, room.name, "-1")
+    end
+  end
+
+  describe "post_message/3 in a new channel" do
+    test "makes the first poster its game master" do
+      creator = user_scope_fixture()
+      name = unique_room()
+      Rooms.subscribe(name)
+
+      assert {:ok, _message} = Rooms.post_message(creator, name, %{"body" => "First"})
+
+      assert %Room{scenario_id: nil} = room = Rooms.get_room(name)
+      assert Rooms.game_master?(creator, room)
+      assert_receive {:room_updated, %Room{name: ^name}}
+
+      other = user_scope_fixture()
+      assert {:ok, _message} = Rooms.post_message(other, name, %{"body" => "Second"})
+      refute Rooms.game_master?(other, room)
+      refute name in Rooms.roleplay_room_names()
+    end
+
+    test "leaves the lobby and older chat rooms without a game master" do
+      poster = user_scope_fixture()
+      chat_room = unique_room()
+      message_fixture(user_scope_fixture(), chat_room)
+
+      for name <- ["lobby", chat_room] do
+        assert {:ok, _message} = Rooms.post_message(poster, name, %{"body" => "Hi"})
+        assert Rooms.get_room(name) == nil
+      end
+    end
+
+    test "creates nothing when the message is invalid" do
       name = unique_room()
 
-      assert {:ok, %Room{name: ^name, scenario: nil}} =
-               Rooms.start_scene(gm, scene, %{"name" => name})
+      assert {:error, _changeset} =
+               Rooms.post_message(user_scope_fixture(), name, %{"body" => ""})
 
-      assert Chat.list_recent_messages(name) == []
-    end
-
-    test "can switch scenarios without announcing anything", %{gm: gm, scene: scene} do
-      other = scenario_fixture(gm, %{"title" => "Hogwarts"})
-
-      assert {:ok, %Room{scenario: %Scenario{title: "Hogwarts"}}} =
-               Rooms.switch_scenario(gm, scene, other.id)
+      assert Rooms.get_room(name) == nil
     end
   end
 

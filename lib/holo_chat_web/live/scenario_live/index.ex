@@ -104,13 +104,34 @@ defmodule HoloChatWeb.ScenarioLive.Index do
                   </.link>
                 </li>
               </ul>
-              <div :if={@current_scope} class="mt-auto flex items-center gap-2 pt-3">
+              <.form
+                :if={@naming == scenario.id}
+                for={@scene_form}
+                id={"new-scene-form-#{scenario.id}"}
+                phx-submit="create_scene"
+                class="mt-3 flex items-start gap-2"
+              >
+                <div class="flex-1">
+                  <.input
+                    field={@scene_form[:name]}
+                    type="text"
+                    placeholder="channel-name"
+                    autocomplete="off"
+                    aria-label="Channel to play in"
+                    phx-mounted={JS.focus()}
+                  />
+                </div>
+                <.button variant="primary" phx-disable-with="Opening…">Open</.button>
+              </.form>
+              <div
+                :if={@current_scope && @naming != scenario.id}
+                class="mt-auto flex items-center gap-2 pt-3"
+              >
                 <button
                   id={"play-scenario-#{scenario.id}"}
                   type="button"
                   phx-click="play"
                   phx-value-id={scenario.id}
-                  phx-disable-with="Creating…"
                   class="flex items-center gap-1.5 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/20"
                 >
                   <.icon name="hero-play" class="size-3.5" />
@@ -141,35 +162,64 @@ defmodule HoloChatWeb.ScenarioLive.Index do
      socket
      |> assign(:page_title, "Scenarios")
      |> assign(:channel, params["room"])
+     |> assign(:naming, nil)
      |> assign(:scenarios, Scenarios.list_scenarios())
      |> assign(:rooms, Enum.group_by(Rooms.list_roleplay_rooms(), & &1.scenario_id))
      |> assign(:room_counts, Presence.room_counts())}
   end
 
   @impl true
+  # Coming from a room, the scenario starts there; otherwise the card asks
+  # for a channel first.
+  def handle_event("play", %{"id" => id}, %{assigns: %{channel: nil}} = socket) do
+    {:noreply,
+     socket
+     |> assign(:naming, String.to_integer(id))
+     |> assign(:scene_form, to_form(%{"name" => ""}, as: :scene))}
+  end
+
   def handle_event("play", %{"id" => id}, socket) do
     %{current_scope: scope, channel: channel} = socket.assigns
 
-    case Rooms.create_roleplay_room(scope, %{"scenario_id" => id, "name" => channel}) do
-      {:ok, %{name: nil} = scene} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Scene created. Cast it, then start it in a channel.")
-         |> push_navigate(to: ~p"/scenes/#{scene.id}/settings")}
-
-      {:ok, room} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Scene created. Welcome, game master!")
-         |> push_navigate(to: ~p"/rooms/#{room.name}")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, put_flash(socket, :error, "Could not create the scene: #{errors(changeset)}.")}
-
-      {:error, :unauthorized} ->
-        {:noreply, put_flash(socket, :error, "Log in to create a scene.")}
+    case Rooms.start_scenario(scope, channel, id) do
+      {:ok, room} -> {:noreply, enter(socket, room)}
+      {:error, %Ecto.Changeset{} = changeset} -> {:noreply, refuse(socket, errors(changeset))}
+      {:error, reason} -> {:noreply, refuse(socket, refusal(reason))}
     end
   end
+
+  def handle_event("create_scene", %{"scene" => %{"name" => name}}, socket) do
+    %{current_scope: scope, naming: id} = socket.assigns
+    name = String.trim(name)
+
+    case Rooms.start_scenario(scope, name, id) do
+      {:ok, room} ->
+        {:noreply, enter(socket, room)}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :scene_form, to_form(changeset, as: :scene))}
+
+      {:error, reason} ->
+        {:noreply,
+         assign(
+           socket,
+           :scene_form,
+           to_form(%{"name" => name}, as: :scene, errors: [name: {refusal(reason), []}])
+         )}
+    end
+  end
+
+  defp enter(socket, room) do
+    socket
+    |> put_flash(:info, "Now playing #{room.scenario.title}. Welcome, game master!")
+    |> push_navigate(to: ~p"/rooms/#{room.name}")
+  end
+
+  defp refuse(socket, reason),
+    do: put_flash(socket, :error, "Could not start the scenario: #{reason}.")
+
+  defp refusal(:unauthorized), do: "has other game masters"
+  defp refusal(:not_found), do: "that scenario no longer exists"
 
   @impl true
   def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do

@@ -344,7 +344,7 @@ defmodule HoloChatWeb.ChatLive do
               <.icon name="hero-cog-6-tooth" class="size-4" /> Room settings
             </.link>
             <.link
-              :if={!@scene && @room != "lobby" && Accounts.admin?(@current_scope)}
+              :if={!@scenario && @room != "lobby" && can_start_scenario?(assigns)}
               id="start-scene-link"
               navigate={~p"/scenarios?room=#{@room}"}
               class="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-violet-600 transition hover:bg-violet-500/10"
@@ -1350,6 +1350,11 @@ defmodule HoloChatWeb.ChatLive do
       scene != nil and Rooms.can_manage?(socket.assigns.current_scope, scene)
     )
   end
+
+  # A room's game masters start its scenarios; admins also those of rooms
+  # nobody runs.
+  defp can_start_scenario?(%{scene: nil, current_scope: scope}), do: Accounts.admin?(scope)
+  defp can_start_scenario?(%{can_manage_scene?: can_manage?}), do: can_manage?
 
   defp assign_personas(socket) do
     assign(socket, :personas, Map.new(Assistant.list_personas(), &{&1.id, &1}))

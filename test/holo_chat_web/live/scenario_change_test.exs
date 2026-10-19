@@ -44,16 +44,11 @@ defmodule HoloChatWeb.ScenarioChangeTest do
   defp start_room(conn, scenario) do
     name = unique_room()
     {:ok, view, _html} = live(conn, ~p"/scenarios")
+    view |> element("#play-scenario-#{scenario.id}") |> render_click()
 
     {:ok, view, _html} =
       view
-      |> element("#play-scenario-#{scenario.id}")
-      |> render_click()
-      |> follow_redirect(conn)
-
-    {:ok, view, _html} =
-      view
-      |> form("#start-scene-form", channel: %{name: name})
+      |> form("#new-scene-form-#{scenario.id}", scene: %{name: name})
       |> render_submit()
       |> follow_redirect(conn, ~p"/rooms/#{name}")
 

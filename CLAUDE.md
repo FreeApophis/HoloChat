@@ -54,8 +54,9 @@ HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Cha
 ├── HoloChat.Scenarios sub-boundary; deps: Repo, Accounts, Avatars, Characters; exports Scenario
 │                      (the shared scenario library: description, images, suggested cast)
 ├── HoloChat.Rooms     sub-boundary; deps: Repo, Accounts, Characters, Chat, Scenarios;
-│                      exports Room (role-play rooms: game masters, cast and the scenario they
-│                      play, switched with an announcing message; chat rooms need no record)
+│                      exports Room (a room's game masters, its first poster, and its scene:
+│                      the scenario it plays with a cast, switched with an announcing message;
+│                      the lobby and older chat rooms have no record)
 └── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Characters, Chat, Rooms;
                        exports Settings, Persona, LLM, Server (personas, and the cast in scenes)
 ```

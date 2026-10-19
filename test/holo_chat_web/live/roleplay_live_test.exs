@@ -59,27 +59,14 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       %{scenario: scenario_fixture(user_scope_fixture(user), %{"title" => "Moonlit Market"})}
     end
 
-    test "starts from a scenario card, waiting for its game master to pick a channel",
+    test "opens a scene in a new channel from a scenario card",
          %{conn: conn, scenario: scenario} do
-      id = create_scene(conn, scenario)
-
-      {:ok, view, _html} = live(conn, ~p"/scenes/#{id}/settings")
-      assert has_element?(view, "#current-scenario", "Moonlit Market")
-      assert has_element?(view, "#start-scene-form")
-
-      # The library stays an overview of scenarios and the rooms playing them.
-      {:ok, library, _html} = live(conn, ~p"/scenarios")
-      refute has_element?(library, "#waiting-scenes")
-    end
-
-    test "starts a waiting scene in a new channel", %{conn: conn, scenario: scenario} do
-      id = create_scene(conn, scenario)
-      {:ok, view, _html} = live(conn, ~p"/scenes/#{id}/settings")
       name = unique_room()
 
       {:ok, view, _html} =
-        view
-        |> form("#start-scene-form", channel: %{name: name})
+        conn
+        |> open_scene_form(scenario)
+        |> form("#new-scene-form-#{scenario.id}", scene: %{name: name})
         |> render_submit()
         |> follow_redirect(conn, ~p"/rooms/#{name}")
 
@@ -90,27 +77,31 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(library, "#scenario-#{scenario.id} #scene-room-#{name}")
     end
 
-    test "refuses to start a scene in a channel already used by a chat room",
+    test "refuses a channel already used by a chat room",
          %{conn: conn, user: user, scenario: scenario} do
       name = unique_room()
       message_fixture(user_scope_fixture(user), name)
-      id = create_scene(conn, scenario)
-      {:ok, view, _html} = live(conn, ~p"/scenes/#{id}/settings")
 
       html =
-        view
-        |> form("#start-scene-form", channel: %{name: name})
+        conn
+        |> open_scene_form(scenario)
+        |> form("#new-scene-form-#{scenario.id}", scene: %{name: name})
         |> render_submit()
 
       assert html =~ "is already taken"
     end
 
-    test "keeps the settings of a waiting scene from players", %{conn: conn, scenario: scenario} do
-      id = create_scene(conn, scenario)
-      player = build_conn_with_unique_ip() |> log_in_user(user_fixture())
+    test "refuses a channel run by other game masters", %{conn: conn, scenario: scenario} do
+      room = roleplay_room_fixture(user_scope_fixture())
 
-      assert {:error, {:redirect, %{to: "/scenarios"}}} =
-               live(player, ~p"/scenes/#{id}/settings")
+      html =
+        conn
+        |> open_scene_form(scenario)
+        |> form("#new-scene-form-#{scenario.id}", scene: %{name: room.name})
+        |> render_submit()
+
+      assert html =~ "has other game masters"
+      assert Rooms.get_room(room.name).scenario_id == room.scenario_id
     end
   end
 
@@ -162,16 +153,11 @@ defmodule HoloChatWeb.RoleplayLiveTest do
 
   defp gm_user(scope), do: scope.user
 
-  # Clicks "New scene" on the scenario's card and returns the id of the
-  # waiting scene.
-  defp create_scene(conn, scenario) do
+  # Clicks "New scene" on the scenario's card, which asks for the channel.
+  defp open_scene_form(conn, scenario) do
     {:ok, view, _html} = live(conn, ~p"/scenarios")
-
-    assert {:error, {:live_redirect, %{to: "/scenes/" <> path}}} =
-             view |> element("#play-scenario-#{scenario.id}") |> render_click()
-
-    [id, "settings"] = String.split(path, "/")
-    id
+    view |> element("#play-scenario-#{scenario.id}") |> render_click()
+    view
   end
 
   describe "scene settings" do
