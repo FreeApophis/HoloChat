@@ -308,6 +308,31 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
+  Returns true if the scope may delete messages in the room called `name`:
+  its game masters, moderators and admins.
+  """
+  def can_moderate?(scope, name) do
+    Accounts.moderator?(scope) or
+      case get_room(name) do
+        nil -> false
+        room -> game_master?(scope, room)
+      end
+  end
+
+  @doc """
+  Deletes the message with the given id for those who may moderate its room
+  (see `can_moderate?/2`). Scenario announcements stay: they mark where the
+  cast's memory of a scenario begins.
+  """
+  def delete_message(scope, message_id) do
+    with %Chat.Message{} = message <- Chat.get_message(message_id) || {:error, :not_found},
+         true <- message.kind == "chat" || {:error, :announcement},
+         true <- can_moderate?(scope, message.room) || {:error, :unauthorized} do
+      Chat.delete_message(message)
+    end
+  end
+
+  @doc """
   Makes the user with the given id a game master of the room called `name`,
   for moderators and admins. A room that has been used but has no record
   yet (an older chat room) gets one. The lobby has no game masters.

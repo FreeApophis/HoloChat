@@ -229,6 +229,28 @@ defmodule HoloChat.Chat do
   end
 
   @doc """
+  Gets a message by id, or nil.
+  """
+  def get_message(id) do
+    case Ecto.Type.cast(:id, id) do
+      {:ok, id} -> Repo.get(Message, id)
+      :error -> nil
+    end
+  end
+
+  @doc """
+  Deletes the message and announces it in its room with
+  `{:message_deleted, %Message{}}`. Who may delete is decided by the caller
+  (see `HoloChat.Rooms.delete_message/2`), since Chat knows no roles.
+  """
+  def delete_message(%Message{} = message) do
+    with {:ok, message} <- Repo.delete(message) do
+      Phoenix.PubSub.broadcast(@pubsub, topic(message.room), {:message_deleted, message})
+      {:ok, message}
+    end
+  end
+
+  @doc """
   Returns a changeset for tracking message form changes.
   """
   def change_message(%Message{} = message, attrs \\ %{}) do

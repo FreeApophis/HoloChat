@@ -290,4 +290,29 @@ defmodule HoloChat.ChatTest do
   test "ordinary messages are chat messages", %{scope: scope, room: room} do
     assert %Message{kind: "chat", scenario_id: nil} = message_fixture(scope, room)
   end
+
+  describe "delete_message/1" do
+    test "deletes the message and announces it in its room" do
+      room = unique_room()
+      message = message_fixture(user_scope_fixture(), room)
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{id: id}} = Chat.delete_message(message)
+
+      assert id == message.id
+      assert_receive {:message_deleted, %Message{id: ^id}}
+      assert Chat.get_message(id) == nil
+      assert Chat.list_recent_messages(room) == []
+    end
+  end
+
+  describe "get_message/1" do
+    test "gets a message by id, or nil" do
+      message = message_fixture(user_scope_fixture(), unique_room())
+
+      assert %Message{} = Chat.get_message("#{message.id}")
+      assert Chat.get_message(-1) == nil
+      assert Chat.get_message("nope") == nil
+    end
+  end
 end

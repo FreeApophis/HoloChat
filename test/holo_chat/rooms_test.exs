@@ -639,4 +639,55 @@ defmodule HoloChat.RoomsTest do
       assert %{cloak_policy: [_]} = errors_on(changeset)
     end
   end
+
+  describe "delete_message/2" do
+    setup do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+      message = message_fixture(user_scope_fixture(), room.name)
+      %{gm: gm, room: room, message: message}
+    end
+
+    test "lets the room's game masters delete messages", %{gm: gm, room: room, message: message} do
+      assert {:ok, _message} = Rooms.delete_message(gm, message.id)
+      refute Enum.any?(Chat.list_recent_messages(room.name), &(&1.id == message.id))
+    end
+
+    test "lets moderators delete messages in any room, the lobby included", %{message: message} do
+      moderator = role_scope_fixture(:moderator)
+      assert {:ok, _message} = Rooms.delete_message(moderator, message.id)
+
+      in_lobby = message_fixture(user_scope_fixture(), "lobby")
+      assert {:ok, _message} = Rooms.delete_message(moderator, in_lobby.id)
+    end
+
+    test "refuses players, even the author", %{message: message} do
+      assert {:error, :unauthorized} = Rooms.delete_message(user_scope_fixture(), message.id)
+
+      author = %HoloChat.Accounts.Scope{user: Accounts.get_user!(message.user_id)}
+      assert {:error, :unauthorized} = Rooms.delete_message(author, message.id)
+      assert {:error, :unauthorized} = Rooms.delete_message(nil, message.id)
+    end
+
+    test "keeps scenario announcements and reports unknown messages", %{gm: gm, room: room} do
+      [announcement] =
+        room.name |> Chat.list_recent_messages() |> Enum.filter(&(&1.kind == "scenario"))
+
+      assert {:error, :announcement} = Rooms.delete_message(gm, announcement.id)
+      assert {:error, :not_found} = Rooms.delete_message(gm, -1)
+    end
+  end
+
+  describe "can_moderate?/2" do
+    test "holds for the room's game masters and for moderators" do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+
+      assert Rooms.can_moderate?(gm, room.name)
+      assert Rooms.can_moderate?(role_scope_fixture(:moderator), unique_room())
+      refute Rooms.can_moderate?(user_scope_fixture(), room.name)
+      refute Rooms.can_moderate?(gm, unique_room())
+      refute Rooms.can_moderate?(nil, room.name)
+    end
+  end
 end

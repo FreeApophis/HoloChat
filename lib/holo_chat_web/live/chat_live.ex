@@ -473,6 +473,20 @@ defmodule HoloChatWeb.ChatLive do
                       >
                         {Calendar.strftime(message.inserted_at, "%H:%M")}
                       </time>
+
+                      <button
+                        :if={@can_moderate?}
+                        id={"delete-message-#{message.id}"}
+                        type="button"
+                        phx-click="delete_message"
+                        phx-value-id={message.id}
+                        data-confirm="Delete this message for everyone?"
+                        aria-label="Delete message"
+                        title="Delete message"
+                        class="self-center rounded p-0.5 text-error opacity-0 transition group-hover:opacity-70 hover:bg-error/10 hover:opacity-100 focus:opacity-100"
+                      >
+                        <.icon name="hero-trash" class="size-3.5" />
+                      </button>
                     </div>
 
                     <.markdown
@@ -860,6 +874,7 @@ defmodule HoloChatWeb.ChatLive do
        scenario: nil,
        cast: [],
        can_manage_scene?: false,
+       can_moderate?: false,
        show_scenario?: false
      )
      |> assign(:scenarios, %{})
@@ -931,6 +946,7 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:cloak, cloak)
     |> assign(:page_title, "#" <> room)
     |> assign_scene(Rooms.get_room(room))
+    |> assign(:can_moderate?, Rooms.can_moderate?(socket.assigns.current_scope, room))
     |> assign(:show_scenario?, false)
     |> assign(:me, me)
     |> update(:unread, &MapSet.delete(&1, room))
@@ -985,6 +1001,15 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   # From the button or from scrolling to the top (phx-viewport-top).
+  def handle_event("delete_message", %{"id" => id}, socket) do
+    # The message disappears for everyone through {:message_deleted, ...}.
+    case Rooms.delete_message(socket.assigns.current_scope, id) do
+      {:ok, _message} -> {:noreply, socket}
+      {:error, :not_found} -> {:noreply, socket}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "You can't delete that message.")}
+    end
+  end
+
   def handle_event("load_older", _params, %{assigns: %{more_messages?: false}} = socket) do
     {:noreply, socket}
   end
@@ -1115,6 +1140,12 @@ defmodule HoloChatWeb.ChatLive do
 
   # Still in flight from a room we just left.
   def handle_info({:new_message, _message}, socket), do: {:noreply, socket}
+
+  def handle_info({:message_deleted, %{room: room} = message}, %{assigns: %{room: room}} = socket) do
+    {:noreply, stream_delete(socket, :messages, message)}
+  end
+
+  def handle_info({:message_deleted, _message}, socket), do: {:noreply, socket}
 
   def handle_info({:room_updated, %{name: room} = scene}, %{assigns: %{room: room}} = socket) do
     roleplay_rooms =
