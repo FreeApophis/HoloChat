@@ -83,6 +83,8 @@ Rules:
   `%Accounts.Scope{}` as their first argument and derive the user from it (see
   `Chat.create_message/3`); they return `{:error, :unauthorized}` for guests. LiveViews pass
   `@current_scope`, never a user id or name from params.
+- User-written text (messages, scenarios, descriptions) is shown with `<.markdown text={...}>`
+  (`HoloChatWeb.Markdown`), which emits only whitelisted tags. Never render it with `raw/1`.
 - Browser UI is LiveView. Non-browser clients will use Phoenix Channels. Both are thin adapters
   over the same context functions, and no business logic lives in either.
 - Never silence Boundary in `lib/` (no `dirty_xrefs`, no `check: [in: false, out: false]`). Only

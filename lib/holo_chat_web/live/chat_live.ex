@@ -151,12 +151,12 @@ defmodule HoloChatWeb.ChatLive do
                 <.icon name="hero-cog-6-tooth" class="size-5" />
               </.link>
             </div>
-            <p
+            <.markdown
               :if={@show_scenario? && @scene.scenario}
               id="scenario"
-              class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
-              phx-no-format
-            >{@scene.scenario}</p>
+              text={@scene.scenario}
+              class="mt-2 max-h-48 overflow-y-auto rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
+            />
           </div>
 
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
@@ -318,10 +318,11 @@ defmodule HoloChatWeb.ChatLive do
                     </time>
                   </div>
 
-                  <%!-- pre-wrap shows any whitespace, so the formatter must not indent the body --%> <p
-                    class="whitespace-pre-wrap break-words text-sm leading-relaxed"
-                    phx-no-format
-                  >{message.body}</p>
+                  <.markdown
+                    text={message.body}
+                    data-role="message-body"
+                    class="text-sm leading-relaxed"
+                  />
                 </div>
               </div>
             </div>
@@ -475,7 +476,12 @@ defmodule HoloChatWeb.ChatLive do
               AI
             </span>
           </h2>
-          <p class="mt-2 whitespace-pre-wrap text-sm opacity-80" phx-no-format>{@profile.description || "No description yet."}</p>
+          <.markdown
+            :if={@profile.description}
+            text={@profile.description}
+            class="mt-2 text-left text-sm opacity-80"
+          />
+          <p :if={!@profile.description} class="mt-2 text-sm opacity-60">No description yet.</p>
         </div>
       </div>
     </Layouts.app>

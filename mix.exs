@@ -43,6 +43,8 @@ defmodule HoloChat.MixProject do
       {:pbkdf2_elixir, "~> 2.0"},
       {:hammer, "~> 7.5"},
       {:stb_image, "~> 1.0"},
+      # Markdown in messages and scenes, parsed to an AST we render ourselves (only safe tags)
+      {:earmark_parser, "~> 1.4"},
       {:mox, "~> 1.3", only: :test},
       {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},

@@ -76,7 +76,7 @@ defmodule HoloChatWeb.CharacterLive.Show do
     ~H"""
     <section :if={@text not in [nil, ""]}>
       <h2 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-60">{@title}</h2>
-      <p id={@id} class="whitespace-pre-wrap text-sm leading-relaxed" phx-no-format>{@text}</p>
+      <.markdown id={@id} text={@text} class="text-sm leading-relaxed" />
     </section>
     """
   end
