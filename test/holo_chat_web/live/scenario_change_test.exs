@@ -47,7 +47,13 @@ defmodule HoloChatWeb.ScenarioChangeTest do
 
     {:ok, view, _html} =
       view
-      |> form("#room-form", room: %{name: name, scenario_id: scenario.id})
+      |> form("#room-form", room: %{scenario_id: scenario.id})
+      |> render_submit()
+      |> follow_redirect(conn)
+
+    {:ok, view, _html} =
+      view
+      |> form("#start-scene-form", channel: %{name: name})
       |> render_submit()
       |> follow_redirect(conn, ~p"/rooms/#{name}")
 
@@ -174,7 +180,8 @@ defmodule HoloChatWeb.ScenarioChangeTest do
       {:ok, view, _html} = live(conn, ~p"/rooms/#{chat_room}")
       refute has_element?(view, "#start-scene-link")
 
-      {:ok, view, _html} = live(conn, ~p"/roleplay/new")
+      # Even through a hand-made link that names the chat room.
+      {:ok, view, _html} = live(conn, ~p"/roleplay/new?room=#{chat_room}")
 
       html =
         view

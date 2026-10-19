@@ -58,6 +58,8 @@ defmodule HoloChatWeb.Router do
       # rights are checked in the LiveView, since they are per room.
       live "/roleplay/new", RoleplayLive.New, :new
       live "/rooms/:room/settings", RoleplayLive.Settings, :edit
+      # Scenes waiting for a channel have no room name yet.
+      live "/scenes/:id/settings", RoleplayLive.Settings, :edit
 
       # Declared before the public /characters/:id so "new" is not an id.
       live "/characters/new", CharacterLive.Form, :new

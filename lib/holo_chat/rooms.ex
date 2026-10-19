@@ -3,9 +3,13 @@ defmodule HoloChat.Rooms do
   The Rooms context: role-play rooms, their game masters and their scene.
 
   Plain chat rooms need no record; they exist as soon as someone posts.
-  A role-play room has one. It plays one scenario from the library (see
+  A scene has one (a `Room`). It plays one scenario from the library (see
   `HoloChat.Scenarios`) at a time with its own cast, and its game masters
   can switch to another scenario; each switch is announced in the chat.
+
+  A scene is created on its own and may wait for a channel: until its game
+  masters start it in one (`start_scene/3`), it has no name and nothing
+  keyed by channel (the room list, the assistant, cloaks) sees it.
 
   In any room, chat or role-play, a player can wear a library character as
   a cloak: they then post under its name and avatar. Whether a player may
@@ -61,6 +65,7 @@ defmodule HoloChat.Rooms do
         from r in Room,
           join: cm in CastMember,
           on: cm.room_id == r.id,
+          where: not is_nil(r.name),
           distinct: true,
           preload: :scenario
       )
@@ -73,7 +78,7 @@ defmodule HoloChat.Rooms do
   """
   def list_roleplay_rooms do
     Room
-    |> where([r], not is_nil(r.scenario_id))
+    |> where([r], not is_nil(r.scenario_id) and not is_nil(r.name))
     |> order_by(desc: :inserted_at, desc: :id)
     |> preload(:scenario)
     |> Repo.all()
@@ -84,7 +89,7 @@ defmodule HoloChat.Rooms do
   """
   def roleplay_room_names do
     Room
-    |> where([r], not is_nil(r.scenario_id))
+    |> where([r], not is_nil(r.scenario_id) and not is_nil(r.name))
     |> select([r], r.name)
     |> Repo.all()
     |> MapSet.new()
@@ -98,12 +103,39 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
-  Creates a role-play room with the scope's user as its game master,
-  playing the scenario `"scenario_id"` with its suggested cast. The scenario
-  is announced in the chat.
+  Gets the scene with the given id with its scenario, or nil.
+  """
+  def get_scene(id) do
+    case Ecto.Type.cast(:id, id) do
+      {:ok, id} -> Room |> Repo.get(id) |> Repo.preload(:scenario)
+      :error -> nil
+    end
+  end
 
-  The name must be a valid room name that no room uses yet. Admins may turn
-  an existing chat room other than the lobby into a scene.
+  @doc """
+  Returns the scenes the scope's user masters that wait for a channel, with
+  their scenario, newest first.
+  """
+  def list_waiting_scenes(%Scope{user: %User{id: user_id}}) do
+    Repo.all(
+      from r in Room,
+        join: gm in GameMaster,
+        on: gm.room_id == r.id,
+        where: gm.user_id == ^user_id and is_nil(r.name),
+        order_by: [desc: r.inserted_at, desc: r.id],
+        preload: :scenario
+    )
+  end
+
+  def list_waiting_scenes(_scope), do: []
+
+  @doc """
+  Creates a scene with the scope's user as its game master, playing the
+  scenario `"scenario_id"` with its suggested cast.
+
+  Without a `"name"` the scene waits for a channel (see `start_scene/3`).
+  With one, it starts there right away and the scenario is announced in the
+  chat; the name follows the rules of `start_scene/3`.
   """
   def create_roleplay_room(%Scope{user: %User{} = user} = scope, attrs) do
     changeset =
@@ -125,6 +157,30 @@ defmodule HoloChat.Rooms do
   end
 
   def create_roleplay_room(_scope, _attrs), do: {:error, :unauthorized}
+
+  @doc """
+  Starts a scene that waits for a channel in the channel `"name"`, and
+  announces its scenario there.
+
+  The name must be a valid room name that no room uses yet. Admins may turn
+  an existing chat room other than the lobby into a scene.
+  """
+  def start_scene(scope, %Room{name: nil} = room, attrs) do
+    authorize(scope, room, fn ->
+      room
+      |> Room.channel_changeset(attrs)
+      |> Ecto.Changeset.validate_change(:name, fn :name, name ->
+        validate_new_name(name, Accounts.admin?(scope))
+      end)
+      |> Repo.update()
+      |> case do
+        {:ok, room} -> announce_scenario({:ok, Repo.preload(room, :scenario)}, scope)
+        error -> error
+      end
+    end)
+  end
+
+  def start_scene(_scope, %Room{}, _attrs), do: {:error, :already_started}
 
   # Names of existing role-play rooms are caught by the unique index.
   defp validate_new_name(name, admin?) do
@@ -204,6 +260,8 @@ defmodule HoloChat.Rooms do
     end)
   end
 
+  defp announce_end({:ok, %Room{name: nil}} = waiting, _scope), do: waiting
+
   defp announce_end({:ok, room}, scope) do
     {:ok, _message} = Chat.create_scenario_end_message(scope, room.name)
     broadcast_update({:ok, room})
@@ -231,6 +289,10 @@ defmodule HoloChat.Rooms do
   defp now, do: DateTime.utc_now(:second)
 
   # After the transaction, so the room is committed when listeners react.
+  # A scene waiting for a channel has no chat to announce in.
+  defp announce_scenario({:ok, %Room{name: nil}} = waiting, _scope), do: waiting
+  defp announce_scenario({:ok, %Room{scenario: nil}} = ended, _scope), do: broadcast_update(ended)
+
   defp announce_scenario({:ok, room}, scope) do
     {:ok, _message} =
       Chat.create_scenario_message(scope, room.name, room.scenario.id, room.scenario.title)
@@ -473,7 +535,10 @@ defmodule HoloChat.Rooms do
     if can_manage?(scope, room), do: fun.(), else: {:error, :unauthorized}
   end
 
-  # Listeners get the room with its scenario.
+  # Listeners get the room with its scenario. Nobody listens to a scene
+  # waiting for a channel.
+  defp broadcast_update({:ok, %Room{name: nil}} = waiting), do: waiting
+
   defp broadcast_update({:ok, %Room{} = room}) do
     room = Repo.preload(room, :scenario)
     Phoenix.PubSub.broadcast(@pubsub, topic(room.name), {:room_updated, room})

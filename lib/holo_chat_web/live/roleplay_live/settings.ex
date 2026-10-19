@@ -11,12 +11,44 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
         <.header>
           Scene settings
           <:subtitle>
-            For the game masters of
-            <.link navigate={~p"/rooms/#{@room.name}"} class="font-medium text-primary">
-              #{@room.name}
-            </.link>
+            <%= if @room.name do %>
+              For the game masters of
+              <.link navigate={~p"/rooms/#{@room.name}"} class="font-medium text-primary">
+                #{@room.name}
+              </.link>
+            <% else %>
+              This scene is waiting for a channel to play in.
+            <% end %>
           </:subtitle>
         </.header>
+
+        <section :if={!@room.name} id="channel" class="space-y-3">
+          <h2 class="text-lg font-semibold">Channel</h2>
+          <p class="text-sm opacity-70">
+            Start the scene in a new channel when the cast is ready. Its scenario is announced
+            there, and the cast begins to play.
+          </p>
+          <.form
+            for={@channel_form}
+            id="start-scene-form"
+            phx-submit="start"
+            class="flex items-start gap-2"
+          >
+            <div class="flex-1">
+              <.input
+                field={@channel_form[:name]}
+                type="text"
+                placeholder="sunken-keep"
+                autocomplete="off"
+                aria-label="Channel name"
+              />
+            </div>
+            <.button variant="primary" phx-disable-with="Starting…">Start</.button>
+          </.form>
+          <p class="-mt-1 text-xs opacity-60">
+            Lowercase letters, digits and dashes. The channel lives at /rooms/<i>name</i>.
+          </p>
+        </section>
 
         <section id="scenario" class="space-y-4">
           <h2 class="text-lg font-semibold">Scenario</h2>
@@ -69,7 +101,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
             </.button>
           </.form>
           <button
-            :if={@room.scenario}
+            :if={@room.scenario && @room.name}
             id="end-scenario"
             type="button"
             phx-click="end_scenario"
@@ -194,9 +226,14 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
   end
 
   @impl true
-  def mount(%{"room" => name}, _session, socket) do
+  def mount(params, _session, socket) do
     scope = socket.assigns.current_scope
-    room = Rooms.get_room(name)
+
+    {room, back} =
+      case params do
+        %{"room" => name} -> {Rooms.get_room(name), ~p"/rooms/#{name}"}
+        %{"id" => id} -> {Rooms.get_scene(id), ~p"/roleplay"}
+      end
 
     if room && Rooms.can_manage?(scope, room) do
       {:ok,
@@ -211,7 +248,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
       {:ok,
        socket
        |> put_flash(:error, "Only the game masters can change this scene.")
-       |> redirect(to: ~p"/rooms/#{name}")}
+       |> redirect(to: back)}
     end
   end
 
@@ -225,6 +262,9 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     scope = socket.assigns.current_scope
 
     case Rooms.update_room(scope, socket.assigns.room, params) do
+      {:ok, %{name: nil} = scene} ->
+        {:noreply, socket |> put_flash(:info, "Scene saved.") |> assign_room(scene)}
+
       {:ok, room} ->
         {:noreply,
          socket
@@ -233,6 +273,27 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset, as: :room))}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
+    end
+  end
+
+  def handle_event("start", %{"channel" => params}, socket) do
+    %{current_scope: scope, room: room} = socket.assigns
+
+    case Rooms.start_scene(scope, room, params) do
+      {:ok, room} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "The scene has started. Welcome, game master!")
+         |> push_navigate(to: ~p"/rooms/#{room.name}")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, :channel_form, to_form(changeset, as: :channel))}
+
+      {:error, :already_started} ->
+        {:noreply, put_flash(socket, :error, "This scene has already started.")}
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You are no longer a game master here.")}
@@ -347,6 +408,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
     |> assign(:room, room)
     |> assign(:form, to_form(Rooms.change_room(room), as: :room))
     |> assign(:switch_form, to_form(%{"scenario_id" => room.scenario_id}, as: :room))
+    |> assign(:channel_form, to_form(%{"name" => ""}, as: :channel))
     |> assign_masters()
     |> assign_cast()
   end

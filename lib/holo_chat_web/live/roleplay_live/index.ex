@@ -41,6 +41,37 @@ defmodule HoloChatWeb.RoleplayLive.Index do
           </.link>
         </div>
 
+        <section :if={@waiting != []} id="waiting-scenes" class="mb-8">
+          <h2 class="mb-3 text-sm font-semibold tracking-wide uppercase opacity-60">
+            Your scenes waiting for a channel
+          </h2>
+          <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <li :for={scene <- @waiting}>
+              <.link
+                id={"waiting-scene-#{scene.id}"}
+                navigate={~p"/scenes/#{scene.id}/settings"}
+                class="flex items-center gap-3 rounded-xl border border-dashed border-base-300 p-3 transition hover:border-primary hover:bg-base-200"
+              >
+                <div class="aspect-video w-20 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500">
+                  <img
+                    :if={scene.scenario && scene.scenario.card_image_id}
+                    src={~p"/avatars/#{scene.scenario.card_image_id}"}
+                    alt=""
+                    class="size-full object-cover"
+                  />
+                </div>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate font-medium">
+                    {if scene.scenario, do: scene.scenario.title, else: "No scenario"}
+                  </p>
+                  <p class="text-xs opacity-60">Cast it, then start it in a channel</p>
+                </div>
+                <.icon name="hero-chevron-right" class="size-4 opacity-50" />
+              </.link>
+            </li>
+          </ul>
+        </section>
+
         <div
           :if={@scenes == []}
           id="no-rooms"
@@ -117,6 +148,7 @@ defmodule HoloChatWeb.RoleplayLive.Index do
      socket
      |> assign(:page_title, "Role-play")
      |> assign(:scenes, group_by_scenario(Rooms.list_roleplay_rooms()))
+     |> assign(:waiting, Rooms.list_waiting_scenes(socket.assigns.current_scope))
      |> assign(:room_counts, Presence.room_counts())}
   end
 
