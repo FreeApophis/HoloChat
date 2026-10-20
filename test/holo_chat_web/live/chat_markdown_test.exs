@@ -27,6 +27,27 @@ defmodule HoloChatWeb.ChatMarkdownTest do
       assert has_element?(view, "#{body} li", "two")
     end
 
+    test "link #room names to the room, switching inside the chat", %{conn: conn} do
+      room = unique_room()
+      other = unique_room()
+
+      message =
+        message_fixture(user_scope_fixture(), room, %{
+          "body" => "Come to ##{other}! Not `##{room}` though."
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
+
+      body = "#messages-#{message.id} [data-role='message-body']"
+      assert has_element?(view, "#{body} a[href='/rooms/#{other}']", "##{other}")
+      refute has_element?(view, "#{body} code a")
+
+      view |> element("#{body} a[href='/rooms/#{other}']") |> render_click()
+
+      assert_patch(view, ~p"/rooms/#{other}")
+      assert has_element?(view, "#room-title", other)
+    end
+
     test "render character replies as Markdown too", %{conn: conn} do
       room = unique_room()
       {:ok, reply} = Chat.create_assistant_message(room, "Sage", "*nods slowly*")

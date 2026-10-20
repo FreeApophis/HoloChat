@@ -54,6 +54,28 @@ defmodule HoloChatWeb.MarkdownTest do
     assert html("![](javascript:x)") == "<p></p>"
   end
 
+  describe "#room names" do
+    test "link to the room with LiveView navigation" do
+      assert html("join #risa-beach, now") ==
+               ~s(<p>join <a href="/rooms/risa-beach" data-phx-link="redirect" data-phx-link-state="push">#risa-beach</a>, now</p>)
+    end
+
+    test "patch instead when asked (inside the chat)" do
+      assert Markdown.to_html("#lobby", room_links: :patch) |> Phoenix.HTML.safe_to_string() ==
+               ~s(<p><a href="/rooms/lobby" data-phx-link="patch" data-phx-link-state="push">#lobby</a></p>)
+    end
+
+    test "are only real room names, outside words, code and links" do
+      for text <- ["C#sharp", "issue #42", "#Lobby", "`#lobby`", "[see](https://x.org/#top)"] do
+        refute html(text) =~ "/rooms/", "#{text} should not link to a room"
+      end
+
+      assert html("```\n#lobby\n```") == "<pre><code>#lobby</code></pre>"
+      assert html("#room-1-.") =~ ~s(href="/rooms/room-1")
+      assert html("#2nd-floor") =~ ~s(href="/rooms/2nd-floor")
+    end
+  end
+
   test "renders nothing for nil or blank text" do
     assert html(nil) == ""
     assert html("  ") == ""

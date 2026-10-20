@@ -7,6 +7,10 @@ defmodule HoloChatWeb.Markdown do
   every `<` is swapped for a placeholder before parsing, so the parser never
   sees a tag. Links keep only http(s) and mailto targets and open in a new tab.
   Images become links, so nobody's browser loads remote images.
+
+  Room names written as `#room` link to the room (except inside code and
+  links), navigating with LiveView, or patching with `room_links: :patch`
+  where the chat itself is open.
   """
 
   # A private-use character the parser treats as plain text.
@@ -16,13 +20,21 @@ defmodule HoloChatWeb.Markdown do
            table thead tbody tr th td)
   @void_tags ~w(br hr)
   @schemes ~w(http https mailto)
+  # Text inside these is shown as typed, without room links.
+  @verbatim_tags ~w(code pre)
+  # A room name (see HoloChat.Chat.valid_room?/1) after # and not inside a word.
+  @room_link ~r/(?<![\w#&])#([a-z0-9][a-z0-9-]{0,31})(?![\w])/u
 
   @doc """
   Returns the HTML for `text` as `Phoenix.HTML.safe`; empty for nil or blank text.
-  """
-  def to_html(text) when text in [nil, ""], do: {:safe, ""}
 
-  def to_html(text) do
+  Options: `room_links: :navigate` (default) or `:patch`.
+  """
+  def to_html(text, opts \\ [])
+
+  def to_html(text, _opts) when text in [nil, ""], do: {:safe, ""}
+
+  def to_html(text, opts) do
     if String.trim(text) == "" do
       {:safe, ""}
     else
@@ -31,28 +43,65 @@ defmodule HoloChatWeb.Markdown do
         |> String.replace("<", @lt)
         |> EarmarkParser.as_ast(breaks: true, footnotes: false, sub_sup: false)
 
-      {:safe, render(ast)}
+      ctx = %{room_links: Keyword.get(opts, :room_links, :navigate), verbatim?: false}
+      {:safe, render(ast, ctx)}
     end
   end
 
-  defp render(nodes) when is_list(nodes), do: Enum.map(nodes, &render/1)
-  defp render(text) when is_binary(text), do: escape(text)
+  defp render(nodes, ctx) when is_list(nodes), do: Enum.map(nodes, &render(&1, ctx))
+  defp render(text, %{verbatim?: true}) when is_binary(text), do: escape(text)
+  defp render(text, ctx) when is_binary(text), do: render_text(text, ctx)
 
-  defp render({"a", attrs, children, _meta}) do
-    link(attr(attrs, "href"), render(children))
+  defp render({"a", attrs, children, _meta}, ctx) do
+    link(attr(attrs, "href"), render(children, %{ctx | verbatim?: true}))
   end
 
-  defp render({"img", attrs, _children, _meta}) do
+  defp render({"img", attrs, _children, _meta}, _ctx) do
     link(attr(attrs, "src"), escape(attr(attrs, "alt") || ""))
   end
 
-  defp render({tag, _attrs, children, _meta}) when tag in @tags,
-    do: ["<", tag, ">", render(children), "</", tag, ">"]
+  defp render({tag, _attrs, children, _meta}, ctx) when tag in @tags do
+    ctx = if tag in @verbatim_tags, do: %{ctx | verbatim?: true}, else: ctx
+    ["<", tag, ">", render(children, ctx), "</", tag, ">"]
+  end
 
-  defp render({tag, _attrs, _children, _meta}) when tag in @void_tags, do: ["<", tag, ">"]
+  defp render({tag, _attrs, _children, _meta}, _ctx) when tag in @void_tags,
+    do: ["<", tag, ">"]
 
   # Anything else (unknown tags) keeps only its text.
-  defp render({_tag, _attrs, children, _meta}), do: render(children)
+  defp render({_tag, _attrs, children, _meta}, ctx), do: render(children, ctx)
+
+  defp render_text(text, ctx) do
+    @room_link
+    |> Regex.split(text, include_captures: true)
+    |> Enum.map(fn part ->
+      case Regex.run(@room_link, part, capture: :all_but_first) do
+        [name] when part == "#" <> name -> room_link(name, ctx)
+        _plain -> escape(part)
+      end
+    end)
+  end
+
+  # Trailing hyphens are punctuation; names need a letter ("#42" is no room).
+  defp room_link(name, ctx) do
+    room = String.trim_trailing(name, "-")
+    rest = String.slice(name, String.length(room)..-1//1)
+
+    if room =~ ~r/[a-z]/ do
+      [
+        ~s(<a href="/rooms/),
+        room,
+        ~s(" data-phx-link="),
+        if(ctx.room_links == :patch, do: "patch", else: "redirect"),
+        ~s(" data-phx-link-state="push">#),
+        room,
+        "</a>",
+        rest
+      ]
+    else
+      escape("#" <> name)
+    end
+  end
 
   defp link(url, content) do
     case safe_url(url) do

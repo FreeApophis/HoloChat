@@ -273,6 +273,7 @@ defmodule HoloChatWeb.ChatLive do
             </div>
             <.markdown
               :if={@show_scenario? && @scenario.description}
+              room_links={:patch}
               id="scenario"
               text={@scenario.description}
               class="mt-2 max-h-48 overflow-y-auto rounded-lg bg-base-100/70 p-3 text-sm leading-relaxed"
@@ -490,6 +491,7 @@ defmodule HoloChatWeb.ChatLive do
                     </div>
 
                     <.markdown
+                      room_links={:patch}
                       text={message.body}
                       data-role="message-body"
                       class="text-sm leading-relaxed"
@@ -733,6 +735,7 @@ defmodule HoloChatWeb.ChatLive do
                 <h2 class="text-lg font-semibold">{@profile.actor.name}</h2>
                 <.markdown
                   :if={@profile.actor.description}
+                  room_links={:patch}
                   text={@profile.actor.description}
                   class="mt-1 text-sm opacity-80"
                 />
@@ -747,6 +750,7 @@ defmodule HoloChatWeb.ChatLive do
                 <h2 class="text-lg font-semibold">{@profile.name}</h2>
                 <.markdown
                   :if={@profile.description}
+                  room_links={:patch}
                   text={@profile.description}
                   class="mt-1 max-h-60 overflow-y-auto text-sm opacity-80"
                 />
@@ -773,6 +777,7 @@ defmodule HoloChatWeb.ChatLive do
             </h2>
             <.markdown
               :if={@profile.description}
+              room_links={:patch}
               text={@profile.description}
               class="mt-2 text-left text-sm opacity-80"
             />
@@ -836,6 +841,7 @@ defmodule HoloChatWeb.ChatLive do
         </p>
         <.markdown
           :if={@scenario && @scenario.description}
+          room_links={:patch}
           text={@scenario.description}
           class="max-h-72 overflow-y-auto text-sm leading-relaxed"
         />
