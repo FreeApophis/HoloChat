@@ -62,13 +62,6 @@ defmodule HoloChatWeb.CharacterLive.Form do
             rows="3"
             placeholder="How they think, talk and behave."
           />
-          <.input
-            field={@form[:example_dialogue]}
-            type="textarea"
-            label="Example dialogue"
-            rows="5"
-            placeholder="A few lines in their voice."
-          />
 
           <.button variant="primary" phx-disable-with="Saving…">Save character</.button>
         </.form>

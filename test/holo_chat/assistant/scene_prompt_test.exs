@@ -12,8 +12,7 @@ defmodule HoloChat.Assistant.ScenePromptTest do
     id: 1,
     name: "Luna",
     description: "Dreamy Ravenclaw.",
-    personality: "Calm.",
-    example_dialogue: "Luna: Nargles."
+    personality: "Calm."
   }
   @neville %Character{id: 2, name: "Neville", description: "Shy. Loves plants. Brave."}
 
@@ -31,7 +30,7 @@ defmodule HoloChat.Assistant.ScenePromptTest do
       assert system.content =~ "A rainy afternoon."
       assert system.content =~ "Dreamy Ravenclaw."
       assert system.content =~ "Calm."
-      assert system.content =~ "Luna: Nargles."
+      refute system.content =~ "Example dialogue"
       assert system.content =~ "Neville"
       assert system.content =~ "ada"
     end

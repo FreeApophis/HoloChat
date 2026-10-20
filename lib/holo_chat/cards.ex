@@ -11,7 +11,8 @@ defmodule HoloChat.Cards do
   Cards come as PNG images with the card in a base64 JSON `tEXt` chunk
   (`ccv3` for V3, `chara` for V1 and V2), or as plain JSON. Placeholders are
   filled in: `{{char}}` with the character's name, `{{user}}` with "the
-  player", since a room has many players.
+  player", since a room has many players. Example chats (`mes_example`) are
+  dropped: models repeat them or take them for past events.
   """
 
   use Boundary,
@@ -88,7 +89,6 @@ defmodule HoloChat.Cards do
       "name" => name,
       "description" => text.("description"),
       "personality" => text.("personality"),
-      "example_dialogue" => fields |> text("mes_example") |> dialogue() |> fill(name),
       "tag_list" => tag_list
     }
 
@@ -120,17 +120,6 @@ defmodule HoloChat.Cards do
     do: tags |> Enum.filter(&is_binary/1) |> Enum.join(", ")
 
   defp tag_list(_tags), do: ""
-
-  # Example chats are separated by <START> lines; the player's lines are
-  # labelled "Player".
-  defp dialogue(text) do
-    text
-    |> String.split(~r/^\s*<START>\s*$/mi)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n\n")
-    |> String.replace(~r/^(?:\{\{user\}\}|<USER>):/mi, "Player:")
-  end
 
   defp fill(text, name) do
     text

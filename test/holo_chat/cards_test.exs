@@ -9,7 +9,7 @@ defmodule HoloChat.CardsTest do
   alias HoloChat.{Cards, Characters, Scenarios}
 
   describe "read/1" do
-    test "splits a V2 card into a character and a scenario draft" do
+    test "splits a V2 card into a character and a scenario draft, without example chats" do
       image = image_binary(8, 12, {30, 120, 200})
 
       card =
@@ -31,8 +31,6 @@ defmodule HoloChat.CardsTest do
                "name" => "Hermione",
                "description" => "Hermione is a witch. The player is her friend.",
                "personality" => "Clever.",
-               "example_dialogue" =>
-                 "Player: Hi\nHermione: Shh!\n\nPlayer: Sorry\nHermione: Fine.",
                "tag_list" => "Harry Potter, Hogwarts"
              }
 

@@ -55,6 +55,7 @@ defmodule HoloChatWeb.CardImportTest do
              )
 
       assert has_element?(view, "#scenario_description", "Hermione studies in the library")
+      refute has_element?(view, "#character_example_dialogue")
 
       {:ok, view, _html} =
         view

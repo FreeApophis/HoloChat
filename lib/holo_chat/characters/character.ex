@@ -14,7 +14,6 @@ defmodule HoloChat.Characters.Character do
     field :tag_list, :string, virtual: true
     field :description, :string
     field :personality, :string
-    field :example_dialogue, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -25,13 +24,12 @@ defmodule HoloChat.Characters.Character do
   """
   def changeset(character, attrs) do
     character
-    |> cast(attrs, [:name, :description, :personality, :example_dialogue])
+    |> cast(attrs, [:name, :description, :personality])
     |> Tags.cast_tag_list(attrs)
     |> update_change(:name, &String.trim/1)
     |> validate_required([:name])
     |> validate_length(:name, max: 60)
     |> validate_length(:description, max: 4000)
     |> validate_length(:personality, max: 2000)
-    |> validate_length(:example_dialogue, max: 4000)
   end
 end

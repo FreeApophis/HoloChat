@@ -95,12 +95,6 @@ defmodule HoloChatWeb.CharacterLive.Import do
                 label="Personality"
                 rows="4"
               />
-              <.input
-                field={@character_form[:example_dialogue]}
-                type="textarea"
-                label="Example dialogue"
-                rows="6"
-              />
             </section>
 
             <section

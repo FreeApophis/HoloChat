@@ -100,6 +100,7 @@ defmodule HoloChatWeb.CharacterLiveTest do
       assert has_element?(view, "#character_name-counter", "0 / 60")
       assert has_element?(view, "#character_description-counter", "0 / 4000")
       refute has_element?(view, "#character_tag_list-counter")
+      refute has_element?(view, "#character_example_dialogue")
 
       view
       |> form("#character-form", character: %{personality: String.duplicate("a", 2001)})

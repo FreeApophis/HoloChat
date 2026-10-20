@@ -57,11 +57,6 @@ defmodule HoloChatWeb.CharacterLive.Show do
             title="Personality"
             text={@character.personality}
           />
-          <.sheet_section
-            id="character-example-dialogue"
-            title="Example dialogue"
-            text={@character.example_dialogue}
-          />
         </div>
       </div>
     </Layouts.app>

@@ -140,14 +140,12 @@ defmodule HoloChatWeb.ChatMarkdownTest do
     character =
       character_fixture(user_scope_fixture(), %{
         "description" => "A *dreamy* Ravenclaw.",
-        "personality" => "**Calm**",
-        "example_dialogue" => "Luna: *smiles*"
+        "personality" => "**Calm**"
       })
 
     {:ok, view, _html} = live(conn, ~p"/characters/#{character.id}")
 
     assert has_element?(view, "#character-description em", "dreamy")
     assert has_element?(view, "#character-personality strong", "Calm")
-    assert has_element?(view, "#character-example-dialogue em", "smiles")
   end
 end

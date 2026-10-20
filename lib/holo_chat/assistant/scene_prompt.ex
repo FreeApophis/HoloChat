@@ -61,8 +61,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
         name,
         [
           character.description,
-          labeled("Personality", character.personality),
-          labeled("Example dialogue", character.example_dialogue)
+          labeled("Personality", character.personality)
         ]
       ),
       section("Others in the scene", others(character, cast, history))
