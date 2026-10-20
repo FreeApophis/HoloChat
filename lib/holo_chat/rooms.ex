@@ -83,6 +83,44 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
+  Returns every room for the room list: the lobby, rooms with messages and
+  rooms with a record, most recently active first, as maps with `:name`,
+  `:topic` and `:scenario_title` (of the scenario played there, if any),
+  `:game_masters` (names, sorted) and `:last_message_at`.
+  """
+  def list_channels do
+    activity = Chat.list_rooms()
+    records = Map.new(Repo.all(from r in Room, preload: :scenario), &{&1.name, &1})
+
+    masters =
+      Repo.all(
+        from gm in GameMaster,
+          join: u in User,
+          on: u.id == gm.user_id,
+          order_by: u.username,
+          select: {gm.room_id, u.username}
+      )
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+
+    last_message_at = Map.new(activity, &{&1.name, &1.last_message_at})
+
+    (Enum.map(activity, & &1.name) ++ Enum.sort(Map.keys(records)) ++ ["lobby"])
+    |> Enum.uniq()
+    |> Enum.map(fn name ->
+      room = records[name]
+      scenario = room && room.scenario
+
+      %{
+        name: name,
+        topic: scenario && scenario.topic,
+        scenario_title: scenario && scenario.title,
+        game_masters: if(room, do: Map.get(masters, room.id, []), else: []),
+        last_message_at: last_message_at[name]
+      }
+    end)
+  end
+
+  @doc """
   Returns up to `limit` rooms to recommend, one per scenario, as
   `%{room: room, players: count}` with the room's scenario.
 

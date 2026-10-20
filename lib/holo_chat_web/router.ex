@@ -94,6 +94,7 @@ defmodule HoloChatWeb.Router do
       live "/", HomeLive, :index
 
       # Guests can read the chat; posting requires a user.
+      live "/rooms", RoomLive.Index, :index
       live "/rooms/:room", ChatLive
       live "/characters", CharacterLive.Index, :index
       live "/characters/:id", CharacterLive.Show, :show

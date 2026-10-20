@@ -54,6 +54,15 @@ defmodule HoloChatWeb.Layouts do
             <.icon name="hero-chat-bubble-left-right" class="size-5" />
           </.link>
           <.link
+            id="rooms-nav-link"
+            navigate={~p"/rooms"}
+            class="rounded-lg p-1.5 transition hover:bg-base-200"
+            aria-label="All rooms"
+            title="All rooms"
+          >
+            <.icon name="hero-queue-list" class="size-5" />
+          </.link>
+          <.link
             id="roleplay-nav-link"
             navigate={~p"/scenarios"}
             class="rounded-lg p-1.5 text-violet-600 transition hover:bg-base-200"

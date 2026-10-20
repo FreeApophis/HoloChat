@@ -82,6 +82,32 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "list_channels/0" do
+    test "lists the lobby, used rooms and scenes with topic and game masters, most active first" do
+      gm = user_scope_fixture()
+      co_gm = user_scope_fixture()
+      scene = roleplay_room_fixture(gm, %{"title" => "Sunset Beach", "topic" => "Sun and surf."})
+      {:ok, _} = Rooms.add_game_master(gm, scene, co_gm.user.username)
+      chat = unique_room()
+      {:ok, _} = Rooms.post_message(user_scope_fixture(), chat, %{"body" => "hi"})
+
+      channels = Rooms.list_channels()
+      names = Enum.map(channels, & &1.name)
+
+      assert "lobby" in names
+      assert Enum.filter(names, &(&1 in [chat, scene.name])) == [chat, scene.name]
+
+      scene_channel = Enum.find(channels, &(&1.name == scene.name))
+      assert scene_channel.topic == "Sun and surf."
+      assert scene_channel.scenario_title == "Sunset Beach"
+      assert scene_channel.game_masters == Enum.sort([gm.user.username, co_gm.user.username])
+
+      # The first poster in a new room becomes its game master.
+      chat_channel = Enum.find(channels, &(&1.name == chat))
+      assert %{topic: nil, scenario_title: nil, game_masters: [_]} = chat_channel
+    end
+  end
+
   describe "list_destinations/2" do
     setup do
       %{gm: user_scope_fixture()}

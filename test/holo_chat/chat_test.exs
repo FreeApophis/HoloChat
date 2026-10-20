@@ -187,6 +187,19 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "list_rooms/0" do
+    test "returns every room with messages, most recently active first", %{scope: scope} do
+      [older, newer] = [unique_room(), unique_room()]
+      message_fixture(scope, older)
+      message_fixture(scope, newer)
+
+      rooms = Chat.list_rooms()
+
+      assert Enum.filter(Enum.map(rooms, & &1.name), &(&1 in [older, newer])) == [newer, older]
+      assert %{last_message_at: %DateTime{}} = Enum.find(rooms, &(&1.name == newer))
+    end
+  end
+
   describe "player_activity/2" do
     test "counts players and their messages since the last scenario started" do
       room = unique_room()

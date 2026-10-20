@@ -61,13 +61,21 @@ defmodule HoloChat.Chat do
   as `%{name: room, last_message_at: datetime}` maps.
   """
   def list_active_rooms(limit \\ 20) do
+    rooms_by_activity() |> limit(^limit) |> Repo.all()
+  end
+
+  @doc """
+  Returns every room that has messages, most recently active first, as
+  `%{name: room, last_message_at: datetime}` maps.
+  """
+  def list_rooms, do: Repo.all(rooms_by_activity())
+
+  defp rooms_by_activity do
     Message
     |> group_by([m], m.room)
     |> select([m], %{name: m.room, last_message_at: max(m.inserted_at)})
     # Ids break ties: clock resolution can give messages equal timestamps.
     |> order_by([m], desc: max(m.inserted_at), desc: max(m.id))
-    |> limit(^limit)
-    |> Repo.all()
   end
 
   @doc """
