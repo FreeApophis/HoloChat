@@ -45,6 +45,16 @@ defmodule HoloChat.ScenariosTest do
   end
 
   describe "listing and getting" do
+    test "list_scenarios_by_owner/1 returns a user's scenarios by title" do
+      owner = user_scope_fixture()
+      zoo = scenario_fixture(owner, %{"title" => "Zoo"})
+      attic = scenario_fixture(owner, %{"title" => "attic"})
+      _other = scenario_fixture(user_scope_fixture())
+
+      assert Enum.map(Scenarios.list_scenarios_by_owner(owner.user.id), & &1.id) ==
+               [attic.id, zoo.id]
+    end
+
     test "list_scenarios/0 returns the newest first" do
       owner = user_scope_fixture()
       first = scenario_fixture(owner)

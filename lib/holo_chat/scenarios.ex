@@ -37,6 +37,17 @@ defmodule HoloChat.Scenarios do
   end
 
   @doc """
+  Returns the scenarios the user with the given id wrote, by title.
+  """
+  def list_scenarios_by_owner(user_id) do
+    Repo.all(
+      from s in Scenario,
+        where: s.owner_id == ^user_id,
+        order_by: [asc: fragment("lower(?)", s.title), asc: s.id]
+    )
+  end
+
+  @doc """
   Returns the scenarios with the given ids.
   """
   def list_scenarios_by_ids(ids), do: Repo.all(from s in Scenario, where: s.id in ^ids)

@@ -100,7 +100,11 @@ defmodule HoloChat.RoomsTest do
       scene_channel = Enum.find(channels, &(&1.name == scene.name))
       assert scene_channel.topic == "Sun and surf."
       assert scene_channel.scenario_title == "Sunset Beach"
-      assert scene_channel.game_masters == Enum.sort([gm.user.username, co_gm.user.username])
+
+      assert Enum.map(scene_channel.game_masters, & &1.username) ==
+               Enum.sort([gm.user.username, co_gm.user.username])
+
+      assert %{avatar_id: nil} = hd(scene_channel.game_masters)
 
       # The first poster in a new room becomes its game master.
       chat_channel = Enum.find(channels, &(&1.name == chat))

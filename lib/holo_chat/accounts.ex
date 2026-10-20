@@ -12,6 +12,17 @@ defmodule HoloChat.Accounts do
   alias HoloChat.Avatars
   alias HoloChat.Repo
 
+  # Site-wide roles, in the order they are shown. Admins grant them (and may
+  # do everything the others do); moderators manage any room; library editors
+  # edit any scenario and character; news editors write the news.
+  @role_order [
+    admin: :is_admin,
+    moderator: :is_moderator,
+    library_editor: :is_library_editor,
+    news_editor: :is_news_editor
+  ]
+  @roles Map.new(@role_order)
+
   ## Database getters
 
   @doc """
@@ -89,6 +100,28 @@ defmodule HoloChat.Accounts do
   end
 
   @doc """
+  Returns the public page of the user called `username` (ignoring case):
+  `id`, `username`, `avatar_id`, `description`, `joined_at` and the site-wide
+  `roles` they hold. Nil if there is no such user.
+  """
+  def get_public_profile(username) when is_binary(username) do
+    case get_user_by_username(username) do
+      nil ->
+        nil
+
+      user ->
+        %{
+          id: user.id,
+          username: user.username,
+          avatar_id: user.avatar_id,
+          description: user.description,
+          joined_at: user.inserted_at,
+          roles: for({role, field} <- @role_order, Map.fetch!(user, field), do: role)
+        }
+    end
+  end
+
+  @doc """
   Returns a changeset for editing the user's public profile.
   """
   def change_user_profile(%User{} = user, attrs \\ %{}) do
@@ -119,16 +152,6 @@ defmodule HoloChat.Accounts do
   end
 
   ## Roles
-
-  # Site-wide roles. Admins grant them (and may do everything the others do);
-  # moderators manage any room; library editors edit any scenario and
-  # character; news editors write the news.
-  @roles %{
-    admin: :is_admin,
-    moderator: :is_moderator,
-    library_editor: :is_library_editor,
-    news_editor: :is_news_editor
-  }
 
   @doc """
   Grants (`true`) or revokes (`false`) admin rights by username. Meant for

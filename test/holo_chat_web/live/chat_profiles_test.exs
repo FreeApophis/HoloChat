@@ -57,6 +57,8 @@ defmodule HoloChatWeb.ChatProfilesTest do
       assert has_element?(view, "#profile-card", "Stargazer.")
       refute has_element?(view, "#profile-card [data-role='assistant-badge']")
 
+      assert has_element?(view, "#profile-card a#profile-page-link[href='/u/#{ada.username}']")
+
       view |> element("#close-profile") |> render_click()
       refute has_element?(view, "#profile-card")
     end

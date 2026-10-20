@@ -74,11 +74,17 @@ defmodule HoloChatWeb.RoomLive.Index do
                   <% end %>
                 </td>
                 <td data-role="game-masters" class="px-4 py-3">
-                  <%= if channel.game_masters == [] do %>
-                    <span class="opacity-40">—</span>
-                  <% else %>
-                    {Enum.join(channel.game_masters, ", ")}
-                  <% end %>
+                  <span :if={channel.game_masters == []} class="opacity-40">—</span>
+                  <div :if={channel.game_masters != []} class="flex -space-x-1.5">
+                    <.link
+                      :for={gm <- channel.game_masters}
+                      navigate={~p"/u/#{gm.username}"}
+                      title={gm.username}
+                      class="rounded-full ring-2 ring-base-100 transition hover:z-10 hover:-translate-y-0.5"
+                    >
+                      <.avatar name={gm.username} avatar_id={gm.avatar_id} class="size-7 text-xs" />
+                    </.link>
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-right">
                   <span
@@ -159,7 +165,11 @@ defmodule HoloChatWeb.RoomLive.Index do
   defp matches?(_channel, ""), do: true
 
   defp matches?(channel, query) do
-    [channel.name, channel.topic, channel.scenario_title | channel.game_masters]
+    [
+      channel.name,
+      channel.topic,
+      channel.scenario_title | Enum.map(channel.game_masters, & &1.username)
+    ]
     |> Enum.any?(&(&1 && String.contains?(String.downcase(&1), query)))
   end
 end

@@ -478,6 +478,22 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
+  describe "get_public_profile/1" do
+    test "finds a user by name, ignoring case, with roles and join date" do
+      user = user_fixture()
+      {:ok, _} = Accounts.update_user_profile(user, %{"description" => "Hi."})
+      {:ok, _} = Accounts.set_role(role_scope_fixture(:admin), user.id, :moderator, true)
+
+      profile = Accounts.get_public_profile(String.upcase(user.username))
+
+      assert %{id: id, username: username, description: "Hi.", roles: [:moderator]} = profile
+      assert {id, username} == {user.id, user.username}
+      assert %DateTime{} = profile.joined_at
+      refute Map.has_key?(profile, :hashed_password)
+      refute Accounts.get_public_profile("nobody_here")
+    end
+  end
+
   describe "set_role/4" do
     setup do
       %{admin: role_scope_fixture(:admin), user: user_fixture()}

@@ -30,6 +30,16 @@ defmodule HoloChat.Characters do
     |> Repo.all()
   end
 
+  @doc """
+  Returns the characters the user with the given id created, by name.
+  """
+  def list_characters_by_owner(user_id) do
+    Character
+    |> where([c], c.owner_id == ^user_id)
+    |> order_by([c], asc: fragment("lower(?)", c.name), asc: c.id)
+    |> Repo.all()
+  end
+
   defp with_tag(query, nil), do: query
   defp with_tag(query, tag), do: where(query, [c], ^tag in c.tags)
 

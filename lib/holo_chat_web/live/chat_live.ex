@@ -883,7 +883,15 @@ defmodule HoloChatWeb.ChatLive do
               />
               <div class="min-w-0 flex-1">
                 <p class="text-xs font-semibold tracking-wide uppercase opacity-60">Actor</p>
-                <h2 class="text-lg font-semibold">{@profile.actor.name}</h2>
+                <h2 class="text-lg font-semibold">
+                  <.link
+                    id="profile-page-link"
+                    navigate={~p"/u/#{@profile.actor.username}"}
+                    class="hover:underline"
+                  >
+                    {@profile.actor.name}
+                  </.link>
+                </h2>
                 <.markdown
                   :if={@profile.actor.description}
                   room_links={:patch}
@@ -933,6 +941,14 @@ defmodule HoloChatWeb.ChatLive do
               class="mt-2 text-left text-sm opacity-80"
             />
             <p :if={!@profile.description} class="mt-2 text-sm opacity-60">No description yet.</p>
+            <.link
+              :if={@profile[:username]}
+              id="profile-page-link"
+              navigate={~p"/u/#{@profile.username}"}
+              class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            >
+              View profile <.icon name="hero-arrow-right" class="size-4" />
+            </.link>
           </div>
         </div>
       </div>
@@ -1501,6 +1517,7 @@ defmodule HoloChatWeb.ChatLive do
           name: profile.username,
           avatar_id: profile.avatar_id,
           description: profile.description,
+          username: profile.username,
           assistant: false,
           actor: nil
         }

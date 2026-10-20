@@ -54,6 +54,16 @@ defmodule HoloChat.CharactersTest do
   end
 
   describe "listing characters" do
+    test "list_characters_by_owner/1 returns a user's characters by name" do
+      owner = user_scope_fixture()
+      zed = character_fixture(owner, %{"name" => "Zed"})
+      amy = character_fixture(owner, %{"name" => "amy"})
+      _other = character_fixture(user_scope_fixture())
+
+      assert Enum.map(Characters.list_characters_by_owner(owner.user.id), & &1.id) ==
+               [amy.id, zed.id]
+    end
+
     test "list_characters/1 filters by tag and sorts by name" do
       scope = user_scope_fixture()
       tag = unique_tag()

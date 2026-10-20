@@ -28,7 +28,9 @@ defmodule HoloChatWeb.RoomListLiveTest do
     row = "#channel-#{scene.name}"
     assert has_element?(view, "#{row} a[href='/rooms/#{scene.name}']", "##{scene.name}")
     assert has_element?(view, "#{row} [data-role='topic']", "Sun and surf.")
-    assert has_element?(view, "#{row} [data-role='game-masters']", gm.user.username)
+    gm_link = "#{row} [data-role='game-masters'] a[href='/u/#{gm.user.username}']"
+    assert has_element?(view, "#{gm_link}[title='#{gm.user.username}']")
+    refute has_element?(view, "#{row} [data-role='game-masters']", gm.user.username)
     assert has_element?(view, "#{row} [data-role='online']", "1")
 
     assert has_element?(view, "#channel-#{chat} a[href='/rooms/#{chat}']")

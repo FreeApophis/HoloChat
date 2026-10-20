@@ -86,7 +86,7 @@ defmodule HoloChat.Rooms do
   Returns every room for the room list: the lobby, rooms with messages and
   rooms with a record, most recently active first, as maps with `:name`,
   `:topic` and `:scenario_title` (of the scenario played there, if any),
-  `:game_masters` (names, sorted) and `:last_message_at`.
+  `:game_masters` (`%{username:, avatar_id:}` by name) and `:last_message_at`.
   """
   def list_channels do
     activity = Chat.list_rooms()
@@ -98,7 +98,7 @@ defmodule HoloChat.Rooms do
           join: u in User,
           on: u.id == gm.user_id,
           order_by: u.username,
-          select: {gm.room_id, u.username}
+          select: {gm.room_id, %{username: u.username, avatar_id: u.avatar_id}}
       )
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
 
