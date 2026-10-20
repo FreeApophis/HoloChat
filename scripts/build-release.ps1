@@ -27,11 +27,18 @@ $release = Join-Path $root "_build\prod\rel\holo_chat"
 
 # Windows can't replace files a running release has open; a half-replaced
 # release would break it. Refuse before touching anything.
-$running = Get-Process | Where-Object { $_.Path -and $_.Path -like "$release\*" }
-if ($running) {
-    $running | Format-Table Id, ProcessName -AutoSize | Out-String | Write-Host
-    throw "The release is running. Stop it first (_build\prod\rel\holo_chat\bin\holo_chat.bat stop, " +
-        "then Stop-Process -Name epmd if it is still listed) and build again."
+$running = @(Get-Process | Where-Object { $_.Path -and $_.Path -like "$release\*" })
+$app = @($running | Where-Object { $_.ProcessName -ne "epmd" })
+if ($app) {
+    $app | Format-Table Id, ProcessName -AutoSize | Out-String | Write-Host
+    throw "The release is running. Stop it first (_build\prod\rel\holo_chat\bin\holo_chat.bat stop) " +
+        "and build again."
+}
+
+# epmd (the Erlang node name daemon) outlives a stopped release and keeps its files locked.
+foreach ($epmd in $running) {
+    Write-Host "==> Stopping the release's leftover epmd (PID $($epmd.Id))" -ForegroundColor Cyan
+    Stop-Process -Id $epmd.Id -Force
 }
 
 Push-Location $root

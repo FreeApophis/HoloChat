@@ -177,7 +177,8 @@ On Windows, build with
 `powershell -ExecutionPolicy Bypass -File scripts\build-release.ps1` and run
 `bin\migrate.bat` and `bin\server.bat`. Stop a running release before
 rebuilding it: Windows can't replace files that are in use, so the script
-refuses to start while the release (or its `epmd`) is still running.
+refuses to start while the release is still running (a leftover `epmd`
+from a stopped release it stops by itself).
 
 The script fetches the dependencies, compiles, builds the assets and the
 release, and then removes the digested assets from `priv/static` again.
