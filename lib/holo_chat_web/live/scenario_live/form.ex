@@ -20,7 +20,7 @@ defmodule HoloChatWeb.ScenarioLive.Form do
         </.header>
 
         <.form for={@form} id="scenario-form" phx-change="validate" phx-submit="save">
-          <.input field={@form[:title]} type="text" label="Title" placeholder="Risa" />
+          <.input field={@form[:title]} type="text" label="Title" placeholder="Sunset Beach" />
           <.input
             field={@form[:topic]}
             type="text"
@@ -31,7 +31,7 @@ defmodule HoloChatWeb.ScenarioLive.Form do
             field={@form[:tag_list]}
             type="text"
             label="Tags"
-            placeholder="star-trek, holiday"
+            placeholder="sci-fi, holiday"
           />
           <p class="-mt-1 mb-3 text-xs opacity-60">
             Comma-separated. Characters with the same tags are suggested for the cast.

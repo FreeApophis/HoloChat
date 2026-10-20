@@ -50,14 +50,14 @@ defmodule HoloChatWeb.HomeLive do
           </div>
 
           <p class="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-medium tracking-wide text-cyan-200 uppercase">
-            <span class="size-1.5 animate-pulse rounded-full bg-cyan-300"></span> The holodeck is open
+            <span class="size-1.5 animate-pulse rounded-full bg-cyan-300"></span> Stories are live
           </p>
           <h1 class="mt-6 max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl">
-            Step through the arch.
+            Step into the story.
             <span class="bg-gradient-to-r from-cyan-300 via-sky-300 to-fuchsia-400 bg-clip-text text-transparent">Anywhere you can imagine.</span>
           </h1>
           <p class="mt-6 max-w-2xl text-lg text-pretty text-slate-300">
-            HoloChat is your gateway to living stories. Stroll the beaches of Risa, haggle in a
+            HoloChat is your gateway to living stories. Stroll a tropical beach, haggle in a
             fantasy bazaar or stand watch on a frontier station, together with real people and
             AI characters who play along.
           </p>
@@ -103,7 +103,7 @@ defmodule HoloChatWeb.HomeLive do
             <div class="max-w-2xl">
               <h2 class="text-sm font-semibold tracking-wide text-primary uppercase">News</h2>
               <p class="mt-2 text-3xl font-bold tracking-tight text-balance">
-                Fresh from the holodeck
+                What's been happening
               </p>
             </div>
             <.link
@@ -204,10 +204,10 @@ defmodule HoloChatWeb.HomeLive do
           class="mt-16 mb-4 rounded-3xl bg-gradient-to-r from-cyan-500 via-sky-600 to-fuchsia-600 px-6 py-12 text-center text-white shadow-lg sm:px-12"
         >
           <h2 class="text-3xl font-bold tracking-tight text-balance">
-            Computer, begin program.
+            Your story starts here.
           </h2>
           <p class="mx-auto mt-3 max-w-xl text-white/85">
-            No headset, no download, no safety protocols to disable. Just a name and a little imagination.
+            No headset, no download. Just a name and a little imagination.
           </p>
           <.link
             navigate={if(@current_scope, do: ~p"/scenarios", else: ~p"/users/register")}

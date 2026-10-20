@@ -13,7 +13,7 @@ defmodule HoloChatWeb.NewsLive.Index do
             <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
               <.icon name="hero-newspaper" class="size-6 text-primary" /> News
             </h1>
-            <p class="mt-1 text-sm opacity-70">What's new on the holodeck.</p>
+            <p class="mt-1 text-sm opacity-70">Updates, events and changes on HoloChat.</p>
           </div>
           <.link
             :if={@can_edit?}
