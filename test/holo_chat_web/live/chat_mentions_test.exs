@@ -6,8 +6,10 @@ defmodule HoloChatWeb.ChatMentionsTest do
   import HoloChat.CharactersFixtures
   import HoloChat.ChatFixtures
   import HoloChat.RoomsFixtures
+  import HoloChatWeb.PresenceHelpers
 
   alias HoloChat.Rooms
+  alias HoloChatWeb.Presence
 
   setup %{conn: conn} do
     me = user_scope_fixture()
@@ -52,6 +54,47 @@ defmodule HoloChatWeb.ChatMentionsTest do
     message = say(bob, room.name, "@#{neelix.name}, more coffee please")
 
     assert has_element?(view, "#messages-#{message.id}[data-mentions-me]")
+  end
+
+  describe "autocomplete" do
+    setup do
+      on_exit(&await_presence_fetchers/0)
+    end
+
+    test "offers the people in the room, by name and character, and rooms",
+         %{conn: conn, me: me, bob: bob} do
+      gm = user_scope_fixture()
+      room = roleplay_room_fixture(gm)
+      riker = character_fixture(gm, %{"name" => "Riker #{unique_tag()}"})
+      {:ok, _} = Rooms.wear_character(bob, room.name, riker.id)
+      other = unique_room()
+
+      Presence.subscribe(room.name)
+
+      {:ok, _bob_view, _html} =
+        live(log_in_user(build_conn_with_unique_ip(), bob.user), ~p"/rooms/#{room.name}")
+
+      await_presence(%{name: bob.user.username})
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{other}")
+      view |> element("#room-tab-lobby a") |> render_click()
+      view |> form("#room-form", room: %{name: room.name}) |> render_submit()
+
+      [composer] =
+        view
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#composer")
+        |> Enum.to_list()
+
+      [mentions] = LazyHTML.attribute(composer, "data-mentions")
+      [rooms] = LazyHTML.attribute(composer, "data-rooms")
+
+      assert bob.user.username in Jason.decode!(mentions)
+      assert riker.name in Jason.decode!(mentions)
+      refute me.user.username in Jason.decode!(mentions)
+      assert Enum.all?(["lobby", other, room.name], &(&1 in Jason.decode!(rooms)))
+      assert has_element?(view, "#composer[phx-hook] #composer-suggestions[phx-update='ignore']")
+    end
   end
 
   test "marks other rooms' tabs and counts mentions in the title until visited",

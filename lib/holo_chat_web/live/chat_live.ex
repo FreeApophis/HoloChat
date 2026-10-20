@@ -720,7 +720,20 @@ defmodule HoloChatWeb.ChatLive do
               />
               <.icon :if={!@cloak} name="hero-identification" class="size-5 opacity-70" />
             </button>
-            <div class="flex-1">
+            <div
+              id="composer"
+              phx-hook=".Autocomplete"
+              data-mentions={Jason.encode!(mention_names(@online_people, @current_scope, @cloak))}
+              data-rooms={Jason.encode!(room_names(@open_rooms, @active_rooms, @roleplay_rooms))}
+              class="relative flex-1"
+            >
+              <ul
+                id="composer-suggestions"
+                phx-update="ignore"
+                role="listbox"
+                class="absolute bottom-full left-0 z-20 mb-2 hidden max-h-56 w-64 overflow-y-auto rounded-xl border border-base-300 bg-base-100 p-1 text-sm shadow-lg"
+              >
+              </ul>
               <.input
                 field={@form[:body]}
                 type="text"
@@ -728,6 +741,93 @@ defmodule HoloChatWeb.ChatLive do
                 autocomplete="off"
               />
             </div>
+            <script :type={Phoenix.LiveView.ColocatedHook} name=".Autocomplete">
+              // Suggests @names and #rooms while typing in the message input. The
+              // candidates come from the server in data-mentions and data-rooms.
+              export default {
+                mounted() {
+                  this.input = this.el.querySelector("input")
+                  this.list = this.el.querySelector("#composer-suggestions")
+                  this.matches = []
+                  this.selected = 0
+                  this.onInput = () => this.suggest()
+                  this.onKeydown = (e) => this.keydown(e)
+                  this.onBlur = () => setTimeout(() => this.close(), 100)
+                  this.input.addEventListener("input", this.onInput)
+                  this.input.addEventListener("keydown", this.onKeydown)
+                  this.input.addEventListener("blur", this.onBlur)
+                  this.list.addEventListener("mousedown", (e) => {
+                    const item = e.target.closest("[data-index]")
+                    if (item) { e.preventDefault(); this.pick(Number(item.dataset.index)) }
+                  })
+                },
+                destroyed() {
+                  this.input.removeEventListener("input", this.onInput)
+                  this.input.removeEventListener("keydown", this.onKeydown)
+                  this.input.removeEventListener("blur", this.onBlur)
+                },
+                // The @word or #word right before the cursor, if any.
+                token() {
+                  const before = this.input.value.slice(0, this.input.selectionStart)
+                  const match = before.match(/(^|[\s(])([@#])([^\s@#]*)$/)
+                  if (!match) return null
+                  return {sigil: match[2], query: match[3], start: before.length - match[3].length - 1}
+                },
+                suggest() {
+                  const token = this.token()
+                  if (!token) return this.close()
+                  const candidates = JSON.parse(token.sigil === "@" ? this.el.dataset.mentions : this.el.dataset.rooms)
+                  const query = token.query.toLowerCase()
+                  this.token_ = token
+                  this.matches = candidates.filter(c => c.toLowerCase().startsWith(query)).slice(0, 8)
+                  this.selected = 0
+                  this.render()
+                },
+                render() {
+                  if (this.matches.length === 0) return this.close()
+                  this.list.replaceChildren(...this.matches.map((name, index) => {
+                    const item = document.createElement("li")
+                    item.dataset.index = index
+                    item.setAttribute("role", "option")
+                    item.setAttribute("aria-selected", index === this.selected)
+                    item.className = "cursor-pointer truncate rounded-lg px-2 py-1 " +
+                      (index === this.selected ? "bg-primary text-primary-content" : "hover:bg-base-200")
+                    item.textContent = this.token_.sigil + name
+                    return item
+                  }))
+                  this.list.classList.remove("hidden")
+                },
+                close() {
+                  this.matches = []
+                  this.list.classList.add("hidden")
+                },
+                keydown(e) {
+                  if (this.matches.length === 0) return
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault()
+                    const step = e.key === "ArrowDown" ? 1 : -1
+                    this.selected = (this.selected + step + this.matches.length) % this.matches.length
+                    this.render()
+                  } else if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault()
+                    this.pick(this.selected)
+                  } else if (e.key === "Escape") {
+                    this.close()
+                  }
+                },
+                pick(index) {
+                  const {sigil, start} = this.token_
+                  const value = this.input.value
+                  const end = this.input.selectionStart
+                  const insert = sigil + this.matches[index] + " "
+                  this.input.value = value.slice(0, start) + insert + value.slice(end)
+                  const cursor = start + insert.length
+                  this.input.setSelectionRange(cursor, cursor)
+                  this.input.dispatchEvent(new Event("input", {bubbles: true}))
+                  this.close()
+                }
+              }
+            </script>
 
             <.button variant="primary" id="send-button" phx-disable-with="Sending…">
               <.icon name="hero-paper-airplane" class="size-4" /> Send
@@ -1628,6 +1728,23 @@ defmodule HoloChatWeb.ChatLive do
   defp room_path(room), do: ~p"/rooms/#{room}"
 
   ## Mentions
+
+  # Names to suggest after @: everyone in the room by account and by the
+  # character they wear (AI personas and characters included), but not us.
+  defp mention_names(online_people, scope, cloak) do
+    mine = [scope && scope.user.username, cloak && cloak.name]
+
+    online_people
+    |> Enum.flat_map(&[&1.name, &1.cloak && &1.cloak.name])
+    |> Enum.reject(&(is_nil(&1) or &1 in mine))
+    |> Enum.uniq()
+    |> Enum.sort_by(&String.downcase/1)
+  end
+
+  # Rooms to suggest after #: open tabs first, then active and role-play rooms.
+  defp room_names(open_rooms, active_rooms, roleplay_rooms) do
+    Enum.uniq(open_rooms ++ Enum.map(active_rooms, & &1.name) ++ Enum.sort(roleplay_rooms))
+  end
 
   # A message addresses us by account name, or by the character we wear in
   # its room; our own messages never do.
