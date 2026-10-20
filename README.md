@@ -98,6 +98,7 @@ or you can build the release yourself on the target machine. Either way you need
 - **A reverse proxy that terminates TLS**, such as Caddy or nginx. The app
   redirects plain HTTP to HTTPS and reads `X-Forwarded-Proto` to tell the two
   apart. The proxy must also pass WebSockets through (LiveView uses `/live`).
+  On a trusted intranet you can skip it and serve plain HTTP (see below).
 - **One instance.** The AI personas share a single queue and the rate limits
   are kept in memory, so don't run several nodes.
 
@@ -129,6 +130,8 @@ The release reads its settings from environment variables (see
 | `POOL_SIZE` | no | Database connections, default `10`. |
 | `ECTO_IPV6` | no | `true` to reach the database over IPv6. |
 | `PORT` | no | The HTTP port the app listens on, default `4000`. |
+| `PHX_IP` | no | The address to listen on, e.g. `127.0.0.1` for this machine only. Default: all interfaces (`::` on Linux, `0.0.0.0` on Windows). |
+| `PHX_SCHEME` | no | `https` (default) redirects plain HTTP to HTTPS and needs the TLS proxy. `http` serves plain HTTP; see "Plain HTTP on an intranet". |
 | `TRUSTED_PROXIES` | behind a proxy | Comma-separated addresses or CIDR ranges of your reverse proxies, e.g. `127.0.0.1` or `172.16.0.0/12`. Only their `X-Forwarded-For` header is believed. Without it, every user seems to come from the proxy's address and the sign-up and login rate limits lock everyone out together. |
 
 For Docker, put them in a file, e.g. `holo_chat.env` (keep it out of git):
@@ -185,6 +188,18 @@ release, and then removes the digested assets from `priv/static` again.
 Copy `_build/prod/rel/holo_chat` to the server if you built it elsewhere; it
 contains the Erlang runtime and needs no Elixir there. Run `bin/server` from
 systemd or a similar service manager.
+
+### Plain HTTP on an intranet
+
+Without a TLS proxy, set `PHX_SCHEME=http` and `PHX_HOST` to the address
+people type, e.g. `192.168.1.100`. The app then serves plain HTTP on `PORT`
+(open `http://192.168.1.100:4000`) and accepts live connections from whichever
+address the page was opened with, so `localhost` keeps working on the server.
+Skip step 4 and leave `TRUSTED_PROXIES` unset.
+
+Passwords and session cookies then cross the network unencrypted. Do this
+only on a network you trust, never on the internet. On Windows, allow the
+app through the firewall when asked (or add an inbound rule for its port).
 
 ### 4. Put the proxy in front
 

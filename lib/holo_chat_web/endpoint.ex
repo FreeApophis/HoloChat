@@ -40,6 +40,9 @@ defmodule HoloChatWeb.Endpoint do
     param_key: "request_logger",
     cookie_key: "request_logger"
 
+  # HTTPS redirect, unless PHX_SCHEME=http (see config/runtime.exs).
+  plug HoloChatWeb.ForceSSL
+
   # The real client IP behind trusted reverse proxies (TRUSTED_PROXIES), for rate limits.
   plug HoloChatWeb.ClientIP
   plug Plug.RequestId

@@ -103,14 +103,42 @@ if config_env() == :prod do
 
   config :holo_chat, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # PHX_SCHEME=http serves plain HTTP (e.g. on an intranet): no redirect to
+  # HTTPS, http:// links on PORT, and LiveView accepts connections from
+  # whichever address the page was opened with. Otherwise HTTPS is forced
+  # (HSTS included), except on localhost.
+  {url, force_ssl, check_origin} =
+    case System.get_env("PHX_SCHEME", "https") do
+      "http" ->
+        {[host: host, port: String.to_integer(System.get_env("PORT", "4000")), scheme: "http"],
+         nil, :conn}
+
+      "https" ->
+        {[host: host, port: 443, scheme: "https"],
+         [rewrite_on: [:x_forwarded_proto], exclude: [hosts: ["localhost", "127.0.0.1"]]], true}
+
+      other ->
+        raise "PHX_SCHEME must be http or https, got: #{inspect(other)}"
+    end
+
+  config :holo_chat, :force_ssl, force_ssl
+
+  default_ip = if match?({:win32, _}, :os.type()), do: "0.0.0.0", else: "::"
+
+  listen_ip =
+    case :inet.parse_address(String.to_charlist(System.get_env("PHX_IP", default_ip))) do
+      {:ok, ip} -> ip
+      {:error, _} -> raise "PHX_IP is not an IP address: #{inspect(System.get_env("PHX_IP"))}"
+    end
+
   config :holo_chat, HoloChatWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: url,
+    check_origin: check_origin,
     http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://bandit.hexdocs.pm/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0}
+      # PHX_IP is the address to listen on, e.g. 127.0.0.1 for this machine only.
+      # By default all interfaces: IPv6 "::", which also accepts IPv4 on Linux
+      # but not on Windows, where IPv4 "0.0.0.0" is used instead.
+      ip: listen_ip
     ],
     secret_key_base: secret_key_base
 
