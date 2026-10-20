@@ -66,12 +66,16 @@ defmodule HoloChatWeb.RoomLive.Index do
                   </.link>
                 </td>
                 <td data-role="topic" class="max-w-md px-4 py-3">
-                  <%= if channel.scenario_title do %>
-                    <span class="font-medium">{channel.scenario_title}</span>
-                    <span :if={channel.topic} class="opacity-70"> · {channel.topic}</span>
-                  <% else %>
-                    <span class="opacity-40">—</span>
-                  <% end %>
+                  <span :if={channel.scenario_title} class="font-medium">
+                    {channel.scenario_title}
+                  </span>
+                  <span :if={channel.scenario_title && channel.topic} class="opacity-50">·</span>
+                  <.markdown
+                    :if={channel.topic}
+                    text={channel.topic}
+                    class="inline opacity-70 [&>p]:inline"
+                  />
+                  <span :if={!channel.scenario_title && !channel.topic} class="opacity-40">—</span>
                 </td>
                 <td data-role="game-masters" class="px-4 py-3">
                   <span :if={channel.game_masters == []} class="opacity-40">—</span>

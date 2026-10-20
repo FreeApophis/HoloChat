@@ -30,7 +30,7 @@ defmodule HoloChat.Rooms do
   alias HoloChat.{Accounts, Characters, Chat, Scenarios}
   alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Repo
-  alias HoloChat.Rooms.{CastMember, Cloak, GameMaster, Room}
+  alias HoloChat.Rooms.{CastMember, Cloak, GameMaster, Room, Topic}
 
   @pubsub HoloChat.PubSub
   @scenes_topic "scenes"
@@ -82,10 +82,56 @@ defmodule HoloChat.Rooms do
     |> Repo.all()
   end
 
+  @topic_max 200
+
+  @doc """
+  Returns the topic of the room called `name`, or nil.
+  """
+  def get_topic(name) do
+    Repo.one(from t in Topic, where: t.room == ^name, select: t.topic)
+  end
+
+  @doc """
+  Sets the topic of the room called `name` (blank clears it) for those who
+  may moderate the room (see `can_moderate?/2`), so moderators also set the
+  lobby's. Announces `{:topic_changed, name, topic}` to the room's
+  subscribers (see `subscribe/1`) and returns `{:ok, topic}`.
+  """
+  def set_topic(scope, name, topic) when is_binary(topic) do
+    topic = String.trim(topic)
+
+    cond do
+      not Chat.valid_room?(name) -> {:error, :invalid_room}
+      not can_moderate?(scope, name) -> {:error, :unauthorized}
+      String.length(topic) > @topic_max -> {:error, :too_long}
+      true -> name |> store_topic(topic) |> broadcast_topic(name)
+    end
+  end
+
+  defp store_topic(name, "") do
+    Repo.delete_all(from t in Topic, where: t.room == ^name)
+    nil
+  end
+
+  defp store_topic(name, topic) do
+    Repo.insert!(%Topic{room: name, topic: topic},
+      on_conflict: {:replace, [:topic, :updated_at]},
+      conflict_target: :room
+    )
+
+    topic
+  end
+
+  defp broadcast_topic(topic, name) do
+    Phoenix.PubSub.broadcast(@pubsub, topic(name), {:topic_changed, name, topic})
+    {:ok, topic}
+  end
+
   @doc """
   Returns every room for the room list: the lobby, rooms with messages and
   rooms with a record, most recently active first, as maps with `:name`,
-  `:topic` and `:scenario_title` (of the scenario played there, if any),
+  `:topic` (the room's own, or that of the scenario played there),
+  `:scenario_title`,
   `:game_masters` (`%{username:, avatar_id:}` by name) and `:last_message_at`.
   """
   def list_channels do
@@ -103,8 +149,10 @@ defmodule HoloChat.Rooms do
       |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
 
     last_message_at = Map.new(activity, &{&1.name, &1.last_message_at})
+    topics = Map.new(Repo.all(from t in Topic, select: {t.room, t.topic}))
 
-    (Enum.map(activity, & &1.name) ++ Enum.sort(Map.keys(records)) ++ ["lobby"])
+    (Enum.map(activity, & &1.name) ++
+       Enum.sort(Map.keys(records) ++ Map.keys(topics)) ++ ["lobby"])
     |> Enum.uniq()
     |> Enum.map(fn name ->
       room = records[name]
@@ -112,7 +160,7 @@ defmodule HoloChat.Rooms do
 
       %{
         name: name,
-        topic: scenario && scenario.topic,
+        topic: topics[name] || (scenario && scenario.topic),
         scenario_title: scenario && scenario.title,
         game_masters: if(room, do: Map.get(masters, room.id, []), else: []),
         last_message_at: last_message_at[name]

@@ -385,6 +385,62 @@ defmodule HoloChatWeb.ChatLive do
           </div>
 
           <div
+            :if={room_topic(assigns) || @can_moderate?}
+            id="room-topic-bar"
+            class="flex items-center gap-2 border-b border-base-300 px-4 py-2 text-sm"
+          >
+            <%= if @editing_topic? do %>
+              <.form
+                for={@topic_form}
+                id="topic-form"
+                phx-submit="save_topic"
+                class="flex flex-1 items-center gap-2"
+              >
+                <div class="flex-1 [&_.fieldset]:mb-0">
+                  <.input
+                    field={@topic_form[:topic]}
+                    type="text"
+                    placeholder="What is this room about? Markdown works."
+                    maxlength="200"
+                    autocomplete="off"
+                    phx-mounted={JS.focus()}
+                  />
+                </div>
+                <.button variant="primary" class="btn-sm">Save</.button>
+                <button
+                  id="cancel-topic"
+                  type="button"
+                  phx-click="cancel_topic"
+                  class="btn btn-sm btn-ghost"
+                >
+                  Cancel
+                </button>
+              </.form>
+            <% else %>
+              <.icon name="hero-chat-bubble-bottom-center-text" class="size-4 shrink-0 opacity-50" />
+              <.markdown
+                :if={room_topic(assigns)}
+                id="room-topic"
+                room_links={:patch}
+                text={room_topic(assigns)}
+                class="min-w-0 flex-1 opacity-80 [&>p]:inline"
+              />
+              <span :if={!room_topic(assigns)} class="flex-1 opacity-50">No topic yet.</span>
+              <button
+                :if={@can_moderate?}
+                id="edit-topic"
+                type="button"
+                phx-click="edit_topic"
+                class="shrink-0 rounded p-1 opacity-60 transition hover:bg-base-200 hover:opacity-100"
+                aria-label="Change the topic"
+                title="Change the topic"
+              >
+                <.icon name="hero-pencil-square" class="size-4" />
+              </button>
+            <% end %>
+          </div>
+
+          <div
             id="message-scroller"
             phx-hook=".ScrollToBottom"
             class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [overflow-anchor:none]"
@@ -1063,6 +1119,7 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(:unread, MapSet.new())
      # Room => mentions of us not seen yet; counted in the page title.
      |> assign(:mentions, %{})
+     |> assign(topic: nil, editing_topic?: false)
      |> assign(:page_hidden?, false)
      |> assign(:open_rooms, [@default_room])
      |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
@@ -1122,6 +1179,8 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:cloak, cloak)
     |> assign_scene(Rooms.get_room(room))
     |> assign(:can_moderate?, Rooms.can_moderate?(socket.assigns.current_scope, room))
+    |> assign(:topic, Rooms.get_topic(room))
+    |> assign(:editing_topic?, false)
     |> assign(:show_scenario?, false)
     |> assign(:me, me)
     |> update(:unread, &MapSet.delete(&1, room))
@@ -1178,6 +1237,28 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   # From the button or from scrolling to the top (phx-viewport-top).
+  def handle_event("edit_topic", _params, socket) do
+    form = to_form(%{"topic" => socket.assigns.topic || ""}, as: :topic)
+    {:noreply, assign(socket, editing_topic?: true, topic_form: form)}
+  end
+
+  def handle_event("cancel_topic", _params, socket),
+    do: {:noreply, assign(socket, :editing_topic?, false)}
+
+  # The new topic arrives through the room's subscription, like everyone else's.
+  def handle_event("save_topic", %{"topic" => %{"topic" => topic}}, socket) do
+    case Rooms.set_topic(socket.assigns.current_scope, socket.assigns.room, topic) do
+      {:ok, _topic} ->
+        {:noreply, assign(socket, :editing_topic?, false)}
+
+      {:error, :too_long} ->
+        {:noreply, put_flash(socket, :error, "Topics can be at most 200 characters long.")}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "You can't change this room's topic.")}
+    end
+  end
+
   # Sent by the PageVisibility hook. Coming back counts as seeing the open room.
   def handle_event("page_visibility", %{"hidden" => hidden?}, socket) do
     socket =
@@ -1345,6 +1426,11 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   def handle_info({:room_updated, _scene}, socket), do: {:noreply, socket}
+
+  def handle_info({:topic_changed, room, topic}, %{assigns: %{room: room}} = socket),
+    do: {:noreply, assign(socket, :topic, topic)}
+
+  def handle_info({:topic_changed, _room, _topic}, socket), do: {:noreply, socket}
 
   # Others' cloaks show through presence. Ours may have changed elsewhere
   # (another tab): show it and pass it on to presence.
@@ -1743,6 +1829,11 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   defp room_path(room), do: ~p"/rooms/#{room}"
+
+  # The room's own topic, or else that of the scenario it plays.
+  defp room_topic(%{topic: topic}) when is_binary(topic), do: topic
+  defp room_topic(%{scenario: %{topic: topic}}), do: topic
+  defp room_topic(_assigns), do: nil
 
   ## Mentions
 

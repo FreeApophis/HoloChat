@@ -82,6 +82,62 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "set_topic/3 and get_topic/1" do
+    test "game masters and moderators set, change and clear a room's topic, announced" do
+      gm = user_scope_fixture()
+      room = unique_room()
+      {:ok, _} = Rooms.post_message(gm, room, %{"body" => "mine"})
+      Rooms.subscribe(room)
+
+      assert {:ok, "Jazz only"} = Rooms.set_topic(gm, room, "  Jazz only ")
+      assert Rooms.get_topic(room) == "Jazz only"
+      assert_receive {:topic_changed, ^room, "Jazz only"}
+
+      assert {:ok, "Blues too"} =
+               Rooms.set_topic(role_scope_fixture(:moderator), room, "Blues too")
+
+      assert {:ok, nil} = Rooms.set_topic(gm, room, " ")
+      assert Rooms.get_topic(room) == nil
+      assert_receive {:topic_changed, ^room, nil}
+    end
+
+    test "moderators set the lobby's topic and that of rooms nobody runs" do
+      moderator = role_scope_fixture(:moderator)
+
+      assert {:ok, "Welcome"} = Rooms.set_topic(moderator, "lobby", "Welcome")
+      assert {:ok, "Quiet"} = Rooms.set_topic(moderator, unique_room(), "Quiet")
+    end
+
+    test "refuses players, guests, long topics and invalid rooms" do
+      room = unique_room()
+      {:ok, _} = Rooms.post_message(user_scope_fixture(), room, %{"body" => "first"})
+      moderator = role_scope_fixture(:moderator)
+
+      assert {:error, :unauthorized} = Rooms.set_topic(user_scope_fixture(), room, "Mine now")
+      assert {:error, :unauthorized} = Rooms.set_topic(nil, room, "Mine now")
+      assert {:error, :unauthorized} = Rooms.set_topic(user_scope_fixture(), "lobby", "Hi")
+      assert {:error, :too_long} = Rooms.set_topic(moderator, room, String.duplicate("a", 201))
+      assert {:error, :invalid_room} = Rooms.set_topic(moderator, "Not Valid", "x")
+      assert Rooms.get_topic(room) == nil
+    end
+
+    test "list_channels/0 shows the room's topic before its scenario's" do
+      gm = user_scope_fixture()
+      scene = roleplay_room_fixture(gm, %{"topic" => "Sun and surf."})
+      chat = unique_room()
+      {:ok, _} = Rooms.set_topic(role_scope_fixture(:moderator), chat, "Chatter")
+
+      assert %{topic: "Sun and surf."} =
+               Enum.find(Rooms.list_channels(), &(&1.name == scene.name))
+
+      {:ok, _} = Rooms.set_topic(gm, scene.name, "Party tonight")
+
+      channels = Rooms.list_channels()
+      assert %{topic: "Party tonight"} = Enum.find(channels, &(&1.name == scene.name))
+      assert %{topic: "Chatter"} = Enum.find(channels, &(&1.name == chat))
+    end
+  end
+
   describe "list_channels/0" do
     test "lists the lobby, used rooms and scenes with topic and game masters, most active first" do
       gm = user_scope_fixture()
