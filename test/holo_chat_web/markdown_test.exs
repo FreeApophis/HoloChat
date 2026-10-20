@@ -76,6 +76,24 @@ defmodule HoloChatWeb.MarkdownTest do
     end
   end
 
+  describe "||spoilers||" do
+    test "hide their text until clicked" do
+      html = html("The butler ||did it||, really.")
+
+      assert html =~
+               ~r{^<p>The butler <span class="spoiler" data-role="spoiler" role="button" tabindex="0" title="Spoiler: click to show" phx-click="[^"]+">did it</span>, really.</p>$}
+
+      assert html =~ "toggle_class"
+    end
+
+    test "can hold room links, and stay text inside code" do
+      assert html("||meet in #lobby||") =~ ~s(<a href="/rooms/lobby")
+      assert html("`||x||`") == "<p><code>||x||</code></p>"
+      assert html("a || b") == "<p>a || b</p>"
+      refute html("||<b>x</b>||") =~ "<b>"
+    end
+  end
+
   test "renders nothing for nil or blank text" do
     assert html(nil) == ""
     assert html("  ") == ""

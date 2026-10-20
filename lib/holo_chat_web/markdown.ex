@@ -10,7 +10,8 @@ defmodule HoloChatWeb.Markdown do
 
   Room names written as `#room` link to the room (except inside code and
   links), navigating with LiveView, or patching with `room_links: :patch`
-  where the chat itself is open.
+  where the chat itself is open. `||text||` is a spoiler, blurred until
+  clicked (or focused with the keyboard).
   """
 
   # A private-use character the parser treats as plain text.
@@ -24,6 +25,12 @@ defmodule HoloChatWeb.Markdown do
   @verbatim_tags ~w(code pre)
   # A room name (see HoloChat.Chat.valid_room?/1) after # and not inside a word.
   @room_link ~r/(?<![\w#&])#([a-z0-9][a-z0-9-]{0,31})(?![\w])/u
+  # ||hidden text|| within one stretch of text, revealed by a click.
+  @spoiler ~r/\|\|(?=\S)(.+?)(?<=\S)\|\|/u
+  @reveal_spoiler "revealed"
+                  |> Phoenix.LiveView.JS.toggle_class()
+                  |> Phoenix.HTML.html_escape()
+                  |> Phoenix.HTML.safe_to_string()
 
   @doc """
   Returns the HTML for `text` as `Phoenix.HTML.safe`; empty for nil or blank text.
@@ -72,6 +79,27 @@ defmodule HoloChatWeb.Markdown do
   defp render({_tag, _attrs, children, _meta}, ctx), do: render(children, ctx)
 
   defp render_text(text, ctx) do
+    @spoiler
+    |> Regex.split(text, include_captures: true)
+    |> Enum.map(fn part ->
+      case Regex.run(@spoiler, part, capture: :all_but_first) do
+        [hidden] when part == "||" <> hidden <> "||" ->
+          [
+            ~s(<span class="spoiler" data-role="spoiler" role="button" tabindex="0" ),
+            ~s(title="Spoiler: click to show" phx-click="),
+            @reveal_spoiler,
+            ~s(">),
+            render_room_links(hidden, ctx),
+            "</span>"
+          ]
+
+        _plain ->
+          render_room_links(part, ctx)
+      end
+    end)
+  end
+
+  defp render_room_links(text, ctx) do
     @room_link
     |> Regex.split(text, include_captures: true)
     |> Enum.map(fn part ->

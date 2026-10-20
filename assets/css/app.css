@@ -115,6 +115,15 @@
 .markdown h2 { font-size: 1.125em; }
 .markdown ul { list-style: disc; padding-left: 1.25em; }
 .markdown ol { list-style: decimal; padding-left: 1.5em; }
+.markdown .spoiler {
+  cursor: pointer;
+  border-radius: 0.25em;
+  padding: 0 0.15em;
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  filter: blur(4px);
+  transition: filter 150ms ease;
+}
+.markdown .spoiler.revealed, .markdown .spoiler:focus-visible { cursor: auto; filter: none; }
 .markdown blockquote {
   border-left: 3px solid color-mix(in oklab, currentColor 25%, transparent);
   padding-left: 0.75em;

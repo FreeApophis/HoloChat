@@ -48,6 +48,19 @@ defmodule HoloChatWeb.ChatMarkdownTest do
       assert has_element?(view, "#room-title", other)
     end
 
+    test "hide ||spoilers|| until clicked", %{conn: conn} do
+      room = unique_room()
+      message = message_fixture(user_scope_fixture(), room, %{"body" => "The butler ||did it||."})
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
+
+      assert has_element?(
+               view,
+               "#messages-#{message.id} [data-role='message-body'] [data-role='spoiler'][phx-click]",
+               "did it"
+             )
+    end
+
     test "render character replies as Markdown too", %{conn: conn} do
       room = unique_room()
       {:ok, reply} = Chat.create_assistant_message(room, "Sage", "*nods slowly*")
