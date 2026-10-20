@@ -17,14 +17,22 @@ defmodule HoloChatWeb.CharacterLive.Index do
               A shared library. Game masters cast these characters in their scenes.
             </p>
           </div>
-          <.link
-            :if={@current_scope}
-            id="new-character-link"
-            navigate={~p"/characters/new"}
-            class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-content shadow-sm transition hover:opacity-90"
-          >
-            <.icon name="hero-plus" class="size-4" /> New character
-          </.link>
+          <div :if={@current_scope} class="flex items-center gap-2">
+            <.link
+              id="import-card-link"
+              navigate={~p"/characters/import"}
+              class="flex items-center gap-1.5 rounded-lg border border-base-300 px-3 py-2 text-sm font-medium shadow-sm transition hover:bg-base-200"
+            >
+              <.icon name="hero-arrow-up-tray" class="size-4" /> Import card
+            </.link>
+            <.link
+              id="new-character-link"
+              navigate={~p"/characters/new"}
+              class="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-content shadow-sm transition hover:opacity-90"
+            >
+              <.icon name="hero-plus" class="size-4" /> New character
+            </.link>
+          </div>
         </div>
 
         <div :if={@tag} id="tag-filter" class="mb-4 flex items-center gap-2 text-sm">

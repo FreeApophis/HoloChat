@@ -17,6 +17,7 @@ defmodule HoloChat do
       Assistant.Settings,
       Avatars,
       Avatars.Avatar,
+      Cards,
       Assistant.Persona,
       Assistant.Server,
       Chat,

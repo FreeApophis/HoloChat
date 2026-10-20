@@ -60,6 +60,7 @@ defmodule HoloChatWeb.Router do
 
       # Declared before the public /characters/:id so "new" is not an id.
       live "/characters/new", CharacterLive.Form, :new
+      live "/characters/import", CharacterLive.Import, :new
       live "/characters/:id/edit", CharacterLive.Form, :edit
 
       live "/scenarios/new", ScenarioLive.Form, :new

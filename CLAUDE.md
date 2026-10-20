@@ -43,7 +43,7 @@ HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, Ra
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
                        Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar,
-                       Characters, Characters.{Character, Tags}, News, News.{Post, Comment}, Rooms,
+                       Cards, Characters, Characters.{Character, Tags}, News, News.{Post, Comment}, Rooms,
                        Rooms.Room, Scenarios, Scenarios.Scenario
 ├── HoloChat.Repo      sub-boundary; private to the core
 ├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (all images, stored in the DB)
@@ -55,6 +55,8 @@ HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Cha
 │                      (the shared character library; tags match characters to scenes)
 ├── HoloChat.Scenarios sub-boundary; deps: Repo, Accounts, Avatars, Characters; exports Scenario
 │                      (the shared scenario library: description, images, suggested cast)
+├── HoloChat.Cards     sub-boundary; deps: Repo, Accounts, Characters, Scenarios
+│                      (SillyTavern card import: splits a card into a character and a scenario)
 ├── HoloChat.Rooms     sub-boundary; deps: Repo, Accounts, Characters, Chat, Scenarios;
 │                      exports Room (a room's game masters, its first poster, and its scene:
 │                      the scenario it plays with a cast, switched with an announcing message;
