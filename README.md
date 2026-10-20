@@ -64,8 +64,13 @@ Phoenix LiveView and PostgreSQL.
 3. Create a persona, put it in a room such as `lobby`, and address it in that
    room as `@Name`.
 
-All personas share one queue, because a local model server generates one reply
-at a time. People's profile descriptions are never sent to the model.
+Personas and scene characters share one queue. By default they answer one at a
+time, which is what a local model server on one GPU usually manages. If the
+server can generate several replies in parallel (koboldcpp's
+`--parallelrequests N`, llama.cpp's `--parallel N`), set **Replies at once** to
+the same number. Different rooms are then answered at the same time, while each
+room still gets one reply after another, so every reply sees the ones before it.
+People's profile descriptions are never sent to the model.
 
 ## Development
 

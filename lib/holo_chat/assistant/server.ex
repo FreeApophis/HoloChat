@@ -13,9 +13,10 @@ defmodule HoloChat.Assistant.Server do
       turns, one at random) answer; a character naming another lets that
       one answer next, up to the scene's limit of AI turns in a row.
 
-  Personas and characters share one queue and answer one at a time,
-  because a local model server generates one reply at a time anyway.
-  Generation runs in a task so the server stays responsive.
+  Personas and characters share one queue. Up to the settings'
+  `parallel_replies` generate at once (as many as the model server runs in
+  parallel), but only one per room: a reply must see the replies before it.
+  Generation runs in tasks so the server stays responsive.
 
   Status changes are broadcast per room and speaker as
   `{:assistant_status, %{room:, name:, persona_id:, character_id:, avatar_id:, online:, typing:}}`
@@ -56,7 +57,8 @@ defmodule HoloChat.Assistant.Server do
       rooms: MapSet.new(),
       announced: MapSet.new(),
       queue: :queue.new(),
-      task: nil,
+      # Task ref => job, for the replies being generated.
+      tasks: %{},
       task_supervisor: Keyword.get(opts, :task_supervisor, HoloChat.Assistant.TaskSupervisor)
     }
 
@@ -81,7 +83,7 @@ defmodule HoloChat.Assistant.Server do
   end
 
   def handle_info({:assistant_settings_changed, settings}, state) do
-    {:noreply, announce(%{state | settings: settings})}
+    {:noreply, %{state | settings: settings} |> announce() |> maybe_start_next()}
   end
 
   def handle_info({:assistant_personas_changed}, state) do
@@ -94,15 +96,18 @@ defmodule HoloChat.Assistant.Server do
 
   def handle_info({:assistant_status, _status}, state), do: {:noreply, state}
 
-  def handle_info({ref, result}, %{task: {ref, job}} = state) do
+  def handle_info({ref, result}, state) when is_map_key(state.tasks, ref) do
     Process.demonitor(ref, [:flush])
+    {job, tasks} = Map.pop!(state.tasks, ref)
     post_reply(result, job)
-    {:noreply, %{state | task: nil} |> announce() |> maybe_start_next()}
+    {:noreply, %{state | tasks: tasks} |> announce() |> maybe_start_next()}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{task: {ref, job}} = state) do
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state)
+      when is_map_key(state.tasks, ref) do
+    {job, tasks} = Map.pop!(state.tasks, ref)
     post_reply({:error, {:crashed, reason}}, job)
-    {:noreply, %{state | task: nil} |> announce() |> maybe_start_next()}
+    {:noreply, %{state | tasks: tasks} |> announce() |> maybe_start_next()}
   end
 
   ## Loading personas and scenes
@@ -240,24 +245,38 @@ defmodule HoloChat.Assistant.Server do
       else: %{state | queue: :queue.in(job, state.queue)}
   end
 
-  defp maybe_start_next(%{task: nil} = state) do
-    case :queue.out(state.queue) do
-      {{:value, job}, queue} ->
-        endpoint_url = state.settings.endpoint_url
+  # Starts queued jobs, oldest first, while there are free slots. A job whose
+  # room already has a reply in progress waits without blocking other rooms.
+  defp maybe_start_next(state) do
+    busy = MapSet.new(Map.values(state.tasks), &job_room/1)
 
-        task =
-          Task.Supervisor.async_nolink(state.task_supervisor, fn ->
-            generate(endpoint_url, job)
-          end)
+    with true <- map_size(state.tasks) < state.settings.parallel_replies,
+         {job, rest} <- pop_ready(:queue.to_list(state.queue), busy, []) do
+      endpoint_url = state.settings.endpoint_url
 
-        announce(%{state | queue: queue, task: {task.ref, job}})
+      task =
+        Task.Supervisor.async_nolink(state.task_supervisor, fn ->
+          generate(endpoint_url, job)
+        end)
 
-      {:empty, _queue} ->
-        state
+      %{state | queue: :queue.from_list(rest), tasks: Map.put(state.tasks, task.ref, job)}
+      |> announce()
+      |> maybe_start_next()
+    else
+      _no_free_slot_or_ready_job -> state
     end
   end
 
-  defp maybe_start_next(state), do: state
+  defp pop_ready([], _busy, _skipped), do: nil
+
+  defp pop_ready([job | jobs], busy, skipped) do
+    if job_room(job) in busy,
+      do: pop_ready(jobs, busy, [job | skipped]),
+      else: {job, Enum.reverse(skipped, jobs)}
+  end
+
+  defp job_room({:persona, _persona, message}), do: message.room
+  defp job_room({:character, room_name, _character}), do: room_name
 
   # Context: the messages before the mention, plus the mention itself.
   defp generate(endpoint_url, {:persona, persona, message}) do
@@ -344,14 +363,13 @@ defmodule HoloChat.Assistant.Server do
     online = if state.settings.enabled, do: online_speakers(state), else: %{}
 
     typing =
-      case state.task do
-        {_ref, {:persona, persona, message}} -> {message.room, persona.name}
-        {_ref, {:character, room_name, character}} -> {room_name, character.name}
-        nil -> nil
-      end
+      MapSet.new(Map.values(state.tasks), fn
+        {:persona, persona, message} -> {message.room, persona.name}
+        {:character, room_name, character} -> {room_name, character.name}
+      end)
 
     for {{room, _name} = pair, speaker} <- online do
-      broadcast_status(room, speaker, %{online: true, typing: pair == typing})
+      broadcast_status(room, speaker, %{online: true, typing: pair in typing})
     end
 
     for {room, name} <- MapSet.difference(state.announced, MapSet.new(Map.keys(online))) do

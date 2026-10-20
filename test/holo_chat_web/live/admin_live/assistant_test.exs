@@ -55,6 +55,29 @@ defmodule HoloChatWeb.AdminLive.AssistantTest do
                Assistant.get_settings()
     end
 
+    test "saves how many replies are generated at once", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/assistant")
+
+      assert has_element?(
+               view,
+               "#assistant-settings-form input[name='settings[parallel_replies]'][value='1']"
+             )
+
+      view
+      |> form("#assistant-settings-form", settings: %{parallel_replies: "2"})
+      |> render_submit()
+
+      assert Assistant.get_settings().parallel_replies == 2
+
+      html =
+        view
+        |> form("#assistant-settings-form", settings: %{parallel_replies: "0"})
+        |> render_submit()
+
+      assert html =~ "must be greater than or equal to 1"
+      assert Assistant.get_settings().parallel_replies == 2
+    end
+
     test "shows validation errors", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/admin/assistant")
 

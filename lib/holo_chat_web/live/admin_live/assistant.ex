@@ -92,6 +92,19 @@ defmodule HoloChatWeb.AdminLive.Assistant do
               <% end %>
             </div>
 
+            <div class="max-w-xs">
+              <.input
+                field={@form[:parallel_replies]}
+                type="number"
+                min="1"
+                max="16"
+                label="Replies at once"
+              />
+            </div>
+            <p class="-mt-1 mb-3 text-xs opacity-70">
+              How many replies the model server generates in parallel (e.g. koboldcpp's <code>--parallelrequests</code>). Each room still answers one reply at a time.
+            </p>
+
             <.button variant="primary" phx-disable-with="Saving…">Save connection</.button>
           </.form>
         </section>

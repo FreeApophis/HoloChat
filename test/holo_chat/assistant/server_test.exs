@@ -142,6 +142,47 @@ defmodule HoloChat.Assistant.ServerTest do
     assert last == "re: #{name}: @Holo again"
   end
 
+  test "with parallel replies, answers different rooms at once but each room in turn",
+       %{admin: admin, member: member, room: room, holo: holo} do
+    other_room = unique_room()
+    Chat.subscribe(other_room)
+    {:ok, _} = Assistant.update_persona(admin, holo, %{"rooms" => [room, other_room]})
+    {:ok, _} = Assistant.update_settings(admin, %{"enabled" => "true", "parallel_replies" => "2"})
+    start_server()
+    test = self()
+
+    expect(LLMMock, :chat, 3, fn _url, messages, _opts ->
+      send(test, {:generating, self(), List.last(messages).content})
+
+      receive do
+        :continue -> {:ok, "re: " <> List.last(messages).content}
+      end
+    end)
+
+    [first_text, second_text, elsewhere_text] =
+      for body <- ["first", "second", "elsewhere"], do: "#{member.user.username}: @Holo #{body}"
+
+    message_fixture(member, room, %{"body" => "@Holo first"})
+    message_fixture(member, room, %{"body" => "@Holo second"})
+    message_fixture(member, other_room, %{"body" => "@Holo elsewhere"})
+
+    # The first mention and the other room run together; the second waits for its room.
+    assert_receive {:generating, first, ^first_text}, 1000
+    assert_receive {:generating, elsewhere, ^elsewhere_text}, 1000
+    refute_receive {:generating, _, _}, 100
+
+    send(elsewhere, :continue)
+    assert_receive {:new_message, %{room: ^other_room, from_assistant: true}}, 1000
+    refute_receive {:generating, _, _}, 100
+
+    send(first, :continue)
+    assert_receive {:generating, second, ^second_text}, 1000
+    send(second, :continue)
+
+    assert_receive {:new_message, %{room: ^room, body: "re: " <> _}}, 1000
+    assert_receive {:new_message, %{room: ^room, body: "re: " <> _}}, 1000
+  end
+
   test "sends recent history up to the mention as context",
        %{admin: admin, member: member, room: room, holo: holo} do
     {:ok, _} = Assistant.update_persona(admin, holo, %{"context_messages" => "3"})
