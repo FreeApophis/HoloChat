@@ -94,6 +94,21 @@ defmodule HoloChatWeb.CharacterLiveTest do
       assert html =~ "can&#39;t be blank"
     end
 
+    test "counts characters in fields with a length limit", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/characters/new")
+
+      assert has_element?(view, "#character_name-counter", "0 / 60")
+      assert has_element?(view, "#character_description-counter", "0 / 4000")
+      refute has_element?(view, "#character_tag_list-counter")
+
+      view
+      |> form("#character-form", character: %{personality: String.duplicate("a", 2001)})
+      |> render_change()
+
+      assert has_element?(view, "#character_personality-counter[data-over]", "2001 / 2000")
+      refute has_element?(view, "#character_description-counter[data-over]")
+    end
+
     test "lets the owner edit and delete", %{conn: conn, user: user} do
       character = character_fixture(user_scope_fixture(user), %{"name" => "Neville"})
       {:ok, view, _html} = live(conn, ~p"/characters/#{character.id}/edit")

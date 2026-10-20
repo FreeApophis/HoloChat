@@ -228,13 +228,16 @@ defmodule HoloChatWeb.CharacterLive.Import do
         socket
         |> assign(:avatar, preview(draft.image))
         |> assign(:with_scenario, draft.scenario != nil)
+        # Validated right away, so fields the card overfills show at once.
         |> assign(
           :character_form,
-          to_form(Characters.change_character(%Character{}, draft.character))
+          to_form(Characters.change_character(%Character{}, draft.character), action: :validate)
         )
         |> assign(
           :scenario_form,
-          to_form(Scenarios.change_scenario(%Scenario{}, draft.scenario || %{}))
+          to_form(Scenarios.change_scenario(%Scenario{}, draft.scenario || %{}),
+            action: :validate
+          )
         )
 
       {:error, :invalid_card} ->

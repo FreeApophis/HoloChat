@@ -185,6 +185,10 @@ defmodule HoloChatWeb.CoreComponents do
   attr :class, :any, default: nil, doc: "the input class to use over defaults"
   attr :error_class, :any, default: nil, doc: "the input error class to use over defaults"
 
+  attr :max_length, :integer,
+    default: nil,
+    doc: "shows a character counter; taken from the changeset's validate_length by default"
+
   attr :rest, :global,
     include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
                 multiple pattern placeholder readonly required rows size step)
@@ -195,6 +199,7 @@ defmodule HoloChatWeb.CoreComponents do
     assigns
     |> assign(field: nil, id: assigns.id || field.id)
     |> assign(:errors, Enum.map(errors, &translate_error(&1)))
+    |> assign(:max_length, assigns.max_length || max_length(field))
     |> assign_new(:name, fn -> if assigns.multiple, do: field.name <> "[]", else: field.name end)
     |> assign_new(:value, fn -> field.value end)
     |> input()
@@ -275,6 +280,7 @@ defmodule HoloChatWeb.CoreComponents do
           {@rest}
         >{Phoenix.HTML.Form.normalize_value("textarea", @value)}</textarea>
       </label>
+      <.counter :if={@max_length} for={@id} value={@value} max={@max_length} />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
     """
@@ -298,8 +304,66 @@ defmodule HoloChatWeb.CoreComponents do
           {@rest}
         />
       </label>
+      <.counter
+        :if={@max_length && @type != "password"}
+        for={@id}
+        value={@value}
+        max={@max_length}
+      />
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>
+    """
+  end
+
+  # The maximum length the changeset's validate_length allows for the field.
+  defp max_length(%Phoenix.HTML.FormField{form: %{source: %Ecto.Changeset{} = changeset}} = field) do
+    Enum.find_value(changeset.validations, fn
+      {name, {:length, opts}} when name == field.field -> opts[:max]
+      _other -> nil
+    end)
+  end
+
+  defp max_length(_field), do: nil
+
+  # How much of a field's maximum length is used. The browser counts again
+  # on every keystroke, since not every form validates on change.
+  attr :for, :string, required: true
+  attr :value, :any, required: true
+  attr :max, :integer, required: true
+
+  defp counter(assigns) do
+    assigns = assign(assigns, :length, String.length(to_string(assigns.value || "")))
+
+    ~H"""
+    <p
+      id={@for <> "-counter"}
+      phx-hook=".LengthCounter"
+      data-for={@for}
+      data-max={@max}
+      data-over={@length > @max}
+      class="mt-1 text-right text-xs tabular-nums opacity-60 data-[over]:font-medium data-[over]:text-error data-[over]:opacity-100"
+    >
+      {@length} / {@max}
+    </p>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".LengthCounter">
+      export default {
+        mounted() {
+          this.input = document.getElementById(this.el.dataset.for)
+          this.onInput = () => this.refresh()
+          this.input?.addEventListener("input", this.onInput)
+          this.refresh()
+        },
+        updated() { this.refresh() },
+        destroyed() { this.input?.removeEventListener("input", this.onInput) },
+        refresh() {
+          if (!this.input) return
+          const max = Number(this.el.dataset.max)
+          const length = [...this.input.value].length
+          this.el.textContent = `${length} / ${max}`
+          this.el.toggleAttribute("data-over", length > max)
+        }
+      }
+    </script>
     """
   end
 

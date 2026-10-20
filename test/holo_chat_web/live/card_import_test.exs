@@ -102,6 +102,16 @@ defmodule HoloChatWeb.CardImportTest do
       assert Characters.list_characters_by_owner(user.id) == []
     end
 
+    test "shows right away which fields are too long, and by how much", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/characters/import")
+      card = card_v2(%{"name" => "Verbose", "description" => String.duplicate("a", 4100)})
+      upload_card(view, "verbose.png", card_png([{"chara", card}]))
+
+      assert has_element?(view, "#character_description-counter[data-over]", "4100 / 4000")
+      assert has_element?(view, "#card-character", "should be at most 4000 character(s)")
+      refute has_element?(view, "#character_personality-counter[data-over]")
+    end
+
     test "reads cards saved as JSON", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/characters/import")
       json = Jason.encode!(card_v2(%{"name" => "Luna"}))
