@@ -224,12 +224,27 @@ defmodule HoloChat.ChatTest do
   end
 
   describe "subscribe_rooms/0" do
-    test "notifies about activity in any room", %{scope: scope, room: room} do
+    test "notifies about activity in any room, with the message", %{scope: scope, room: room} do
       Chat.subscribe_rooms()
       message = message_fixture(scope, room)
 
-      assert_receive {:room_activity, ^room, at}
-      assert at == message.inserted_at
+      assert_receive {:room_activity, %Message{room: ^room} = received}
+      assert received.id == message.id
+    end
+  end
+
+  describe "mentions?/2" do
+    test "finds @name, ignoring case, outside words, e-mail addresses and code" do
+      assert Chat.mentions?("hi @Ada!", "ada")
+      assert Chat.mentions?("@ADA", "Ada")
+      assert Chat.mentions?("ping @Will Riker, now", "Will Riker")
+
+      refute Chat.mentions?("hi @Adam", "Ada")
+      refute Chat.mentions?("mail ada@ada.org", "ada")
+      refute Chat.mentions?("x@Ada", "Ada")
+      refute Chat.mentions?("`@Ada` and\n```\n@Ada\n```", "Ada")
+      refute Chat.mentions?("hi Ada", "Ada")
+      refute Chat.mentions?(nil, "Ada")
     end
   end
 

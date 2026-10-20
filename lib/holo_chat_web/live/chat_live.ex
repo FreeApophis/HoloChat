@@ -16,7 +16,21 @@ defmodule HoloChatWeb.ChatLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex min-h-0 flex-1 flex-col">
+      <div id="chat" phx-hook=".PageVisibility" class="flex min-h-0 flex-1 flex-col">
+        <script :type={Phoenix.LiveView.ColocatedHook} name=".PageVisibility">
+          // Tells the server whether the page is in the background, so mentions in
+          // the open room count in the title until the reader comes back.
+          export default {
+            mounted() {
+              this.report = () => this.pushEvent("page_visibility", {hidden: document.hidden})
+              document.addEventListener("visibilitychange", this.report)
+              if (document.hidden) this.report()
+            },
+            destroyed() {
+              document.removeEventListener("visibilitychange", this.report)
+            }
+          }
+        </script>
         <div class="relative z-10 -mb-px flex items-end gap-1 pl-2">
           <nav
             id="room-tabs"
@@ -25,7 +39,7 @@ defmodule HoloChatWeb.ChatLive do
             aria-label="Open rooms"
           >
             <div
-              :for={tab <- room_tabs(@open_rooms, @room_counts, @room, @unread)}
+              :for={tab <- room_tabs(@open_rooms, @room_counts, @room, @unread, @mentions)}
               id={"room-tab-#{tab.name}"}
               data-kind={room_kind(@roleplay_rooms, tab.name)}
               class={[
@@ -55,7 +69,15 @@ defmodule HoloChatWeb.ChatLive do
                   {tab.name}
                 </span>
                 <span
-                  :if={tab.unread?}
+                  :if={tab.mentions > 0}
+                  id={"tab-mention-#{tab.name}"}
+                  class="grid h-4 min-w-4 shrink-0 place-items-center rounded-full bg-amber-500 px-1 text-[0.65rem] font-bold text-white"
+                  title={"You were mentioned #{tab.mentions} #{if tab.mentions == 1, do: "time", else: "times"}"}
+                >
+                  @
+                </span>
+                <span
+                  :if={tab.unread? && tab.mentions == 0}
                   id={"tab-unread-#{tab.name}"}
                   class="size-2 shrink-0 rounded-full bg-primary"
                   aria-label="New messages"
@@ -156,7 +178,7 @@ defmodule HoloChatWeb.ChatLive do
               </h2>
               <div id="room-list" class="max-h-72 overflow-y-auto" aria-label="Rooms">
                 <button
-                  :for={room <- room_list(@active_rooms, @room_counts, @room, @unread)}
+                  :for={room <- room_list(@active_rooms, @room_counts, @room, @unread, @mentions)}
                   id={"room-link-#{room.name}"}
                   type="button"
                   phx-click={JS.hide(to: "#room-browser") |> JS.patch(room_path(room.name))}
@@ -178,7 +200,15 @@ defmodule HoloChatWeb.ChatLive do
                     {room.name}
                   </span>
                   <span
-                    :if={room.unread?}
+                    :if={room.mentions > 0}
+                    id={"room-mention-#{room.name}"}
+                    class="grid h-4 min-w-4 shrink-0 place-items-center rounded-full bg-amber-500 px-1 text-[0.65rem] font-bold text-white"
+                    title="You were mentioned"
+                  >
+                    @
+                  </span>
+                  <span
+                    :if={room.unread? && room.mentions == 0}
                     id={"room-unread-#{room.name}"}
                     class="size-2 shrink-0 rounded-full bg-primary"
                     aria-label="New messages"
@@ -390,7 +420,11 @@ defmodule HoloChatWeb.ChatLive do
               phx-viewport-top={@more_messages? && "load_older"}
               class="space-y-1"
             >
-              <div :for={{id, message} <- @streams.messages} id={id}>
+              <div
+                :for={{id, message} <- @streams.messages}
+                id={id}
+                data-mentions-me={mentions_me?(message, @current_scope, @cloak)}
+              >
                 <.scenario_intro
                   :if={message.kind == "scenario"}
                   message={message}
@@ -410,7 +444,13 @@ defmodule HoloChatWeb.ChatLive do
                 </div>
                 <div
                   :if={message.kind == "chat"}
-                  class="group flex gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-base-200/60"
+                  class={[
+                    "group flex gap-3 rounded-xl px-2 py-1.5 transition-colors",
+                    if(mentions_me?(message, @current_scope, @cloak),
+                      do: "bg-amber-400/15 ring-1 ring-amber-500/30 ring-inset",
+                      else: "hover:bg-base-200/60"
+                    )
+                  ]}
                 >
                   <% author = author(message, @personas, @characters) %>
                   <button
@@ -894,6 +934,9 @@ defmodule HoloChatWeb.ChatLive do
      |> assign(:characters, %{})
      |> assign(:typing_timer, nil)
      |> assign(:unread, MapSet.new())
+     # Room => mentions of us not seen yet; counted in the page title.
+     |> assign(:mentions, %{})
+     |> assign(:page_hidden?, false)
      |> assign(:open_rooms, [@default_room])
      |> assign(:active_rooms, Chat.list_active_rooms(@room_list_size))
      |> assign(:room_counts, Presence.room_counts())}
@@ -950,12 +993,13 @@ defmodule HoloChatWeb.ChatLive do
     socket
     |> assign(:room, room)
     |> assign(:cloak, cloak)
-    |> assign(:page_title, "#" <> room)
     |> assign_scene(Rooms.get_room(room))
     |> assign(:can_moderate?, Rooms.can_moderate?(socket.assigns.current_scope, room))
     |> assign(:show_scenario?, false)
     |> assign(:me, me)
     |> update(:unread, &MapSet.delete(&1, room))
+    |> update(:mentions, &Map.delete(&1, room))
+    |> assign_title()
     |> open_tab(room)
     |> assign(:room_counts, Presence.room_counts())
     |> assign_presence()
@@ -1007,6 +1051,16 @@ defmodule HoloChatWeb.ChatLive do
   end
 
   # From the button or from scrolling to the top (phx-viewport-top).
+  # Sent by the PageVisibility hook. Coming back counts as seeing the open room.
+  def handle_event("page_visibility", %{"hidden" => hidden?}, socket) do
+    socket =
+      if hidden?,
+        do: socket,
+        else: update(socket, :mentions, &Map.delete(&1, socket.assigns.room))
+
+    {:noreply, socket |> assign(:page_hidden?, hidden?) |> assign_title()}
+  end
+
   def handle_event("delete_message", %{"id" => id}, socket) do
     # The message disappears for everyone through {:message_deleted, ...}.
     case Rooms.delete_message(socket.assigns.current_scope, id) do
@@ -1141,7 +1195,8 @@ defmodule HoloChatWeb.ChatLive do
      |> remember_characters([message])
      |> remember_scenarios([message])
      |> assign(:has_messages?, true)
-     |> stream_insert(:messages, message)}
+     |> stream_insert(:messages, message)
+     |> count_unseen_mention(message)}
   end
 
   # Still in flight from a room we just left.
@@ -1192,7 +1247,7 @@ defmodule HoloChatWeb.ChatLive do
     end
   end
 
-  def handle_info({:room_activity, room, at}, socket) do
+  def handle_info({:room_activity, %Message{room: room, inserted_at: at} = message}, socket) do
     active_rooms =
       [
         %{name: room, last_message_at: at}
@@ -1204,6 +1259,12 @@ defmodule HoloChatWeb.ChatLive do
       if room == socket.assigns.room,
         do: socket.assigns.unread,
         else: MapSet.put(socket.assigns.unread, room)
+
+    # Mentions in the open room are counted with the message itself.
+    socket =
+      if room == socket.assigns.room,
+        do: socket,
+        else: count_unseen_mention(socket, message)
 
     {:noreply, assign(socket, active_rooms: active_rooms, unread: unread)}
   end
@@ -1517,12 +1578,13 @@ defmodule HoloChatWeb.ChatLive do
 
   defp push_tabs(socket), do: push_event(socket, "chat:tabs", %{rooms: socket.assigns.open_rooms})
 
-  defp room_tabs(open_rooms, room_counts, current, unread) do
+  defp room_tabs(open_rooms, room_counts, current, unread, mentions) do
     Enum.map(open_rooms, fn name ->
       %{
         name: name,
         online: Map.get(room_counts, name, 0),
         unread?: MapSet.member?(unread, name),
+        mentions: Map.get(mentions, name, 0),
         current?: name == current,
         closable?: name != @default_room
       }
@@ -1537,7 +1599,7 @@ defmodule HoloChatWeb.ChatLive do
 
   # Lobby first, then rooms by latest message, then rooms that only have
   # people in them, and finally the current room if it is none of those.
-  defp room_list(active_rooms, room_counts, current, unread) do
+  defp room_list(active_rooms, room_counts, current, unread, mentions) do
     ([@default_room | Enum.map(active_rooms, & &1.name)] ++
        Enum.sort(Map.keys(room_counts)) ++ [current])
     |> Enum.uniq()
@@ -1546,12 +1608,57 @@ defmodule HoloChatWeb.ChatLive do
         name: name,
         online: Map.get(room_counts, name, 0),
         unread?: MapSet.member?(unread, name),
+        mentions: Map.get(mentions, name, 0),
         current?: name == current
       }
     end)
   end
 
   defp room_path(room), do: ~p"/rooms/#{room}"
+
+  ## Mentions
+
+  # A message addresses us by account name, or by the character we wear in
+  # its room; our own messages never do.
+  defp mentions_me?(message, scope, cloak) do
+    case scope do
+      %{user: %{id: id, username: username}} when message.user_id != id ->
+        names = if cloak, do: [username, cloak.name], else: [username]
+        Enum.any?(names, &Chat.mentions?(message.body, &1))
+
+      _guest_or_own ->
+        false
+    end
+  end
+
+  # Mentions in other rooms, or in the open room while the page is hidden,
+  # count until the room is seen.
+  defp count_unseen_mention(socket, %Message{room: room} = message) do
+    %{current_scope: scope, room: current, page_hidden?: hidden?} = socket.assigns
+    unseen? = room != current or hidden?
+
+    if unseen? and mentions_me?(message, scope, cloak_in(socket, room)) do
+      socket |> update(:mentions, &Map.update(&1, room, 1, fn n -> n + 1 end)) |> assign_title()
+    else
+      socket
+    end
+  end
+
+  # Our cloak elsewhere is only looked up for messages that mention anyone.
+  defp cloak_in(%{assigns: %{room: room, cloak: cloak}}, room), do: cloak
+
+  defp cloak_in(%{assigns: %{current_scope: scope}}, room) do
+    if scope, do: Rooms.get_cloak(scope, room)
+  end
+
+  defp assign_title(socket) do
+    title = "#" <> socket.assigns.room
+
+    case socket.assigns.mentions |> Map.values() |> Enum.sum() do
+      0 -> assign(socket, :page_title, title)
+      count -> assign(socket, :page_title, "(#{count}) " <> title)
+    end
+  end
 
   defp normalize_room(name) do
     name

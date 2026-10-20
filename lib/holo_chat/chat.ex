@@ -50,7 +50,7 @@ defmodule HoloChat.Chat do
   @doc """
   Subscribes the calling process to activity in all rooms.
 
-  Subscribers receive `{:room_activity, room, %DateTime{}}` for every new message.
+  Subscribers receive `{:room_activity, %Message{}}` for every new message.
   """
   def subscribe_rooms do
     Phoenix.PubSub.subscribe(@pubsub, @rooms_topic)
@@ -183,7 +183,20 @@ defmodule HoloChat.Chat do
 
   defp broadcast_new_message(%Message{room: room} = message) do
     Phoenix.PubSub.broadcast(@pubsub, topic(room), {:new_message, message})
-    Phoenix.PubSub.broadcast(@pubsub, @rooms_topic, {:room_activity, room, message.inserted_at})
+    Phoenix.PubSub.broadcast(@pubsub, @rooms_topic, {:room_activity, message})
+  end
+
+  @doc """
+  Returns true if `body` addresses `name` as `@name` (ignoring case), not
+  inside a word, an e-mail address, a longer name or code.
+  """
+  def mentions?(nil, _name), do: false
+
+  def mentions?(body, name) when is_binary(body) and is_binary(name) do
+    body
+    |> String.replace(~r/```.*?(```|\z)/s, " ")
+    |> String.replace(~r/`[^`]*`/, " ")
+    |> String.match?(~r/(?<![\w@.])@#{Regex.escape(name)}(?!\w)/iu)
   end
 
   @doc """

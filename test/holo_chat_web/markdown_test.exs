@@ -76,6 +76,12 @@ defmodule HoloChatWeb.MarkdownTest do
     end
   end
 
+  test "marks @mentions, but not e-mail addresses or code" do
+    assert html("hi @Ada_1!") == ~s(<p>hi <span class="mention">@Ada_1</span>!</p>)
+    assert html("mail ada@example.org") == "<p>mail ada@example.org</p>"
+    assert html("`@Ada`") == "<p><code>@Ada</code></p>"
+  end
+
   describe "||spoilers||" do
     test "hide their text until clicked" do
       html = html("The butler ||did it||, really.")

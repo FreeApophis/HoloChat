@@ -25,6 +25,8 @@ defmodule HoloChatWeb.Markdown do
   @verbatim_tags ~w(code pre)
   # A room name (see HoloChat.Chat.valid_room?/1) after # and not inside a word.
   @room_link ~r/(?<![\w#&])#([a-z0-9][a-z0-9-]{0,31})(?![\w])/u
+  # @name, not inside a word or an e-mail address (see HoloChat.Chat.mentions?/2).
+  @mention ~r/(?<![\w@.])@[A-Za-z0-9_]+/u
   # ||hidden text|| within one stretch of text, revealed by a click.
   @spoiler ~r/\|\|(?=\S)(.+?)(?<=\S)\|\|/u
   @reveal_spoiler "revealed"
@@ -105,8 +107,18 @@ defmodule HoloChatWeb.Markdown do
     |> Enum.map(fn part ->
       case Regex.run(@room_link, part, capture: :all_but_first) do
         [name] when part == "#" <> name -> room_link(name, ctx)
-        _plain -> escape(part)
+        _plain -> render_mentions(part)
       end
+    end)
+  end
+
+  defp render_mentions(text) do
+    @mention
+    |> Regex.split(text, include_captures: true)
+    |> Enum.map(fn part ->
+      if Regex.match?(@mention, part),
+        do: [~s(<span class="mention">), escape(part), "</span>"],
+        else: escape(part)
     end)
   end
 
