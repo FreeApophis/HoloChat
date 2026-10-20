@@ -83,6 +83,32 @@ defmodule HoloChat.Rooms do
   end
 
   @doc """
+  Returns up to `limit` rooms to recommend, one per scenario, as
+  `%{room: room, players: count}` with the room's scenario.
+
+  The rooms with the most players over the 7 days before `now` (since their
+  scenario started) come first, then more messages; quiet rooms follow,
+  most recently active first. See `HoloChat.Chat.player_activity/2`.
+  """
+  def list_destinations(limit, now \\ DateTime.utc_now()) do
+    rooms = list_roleplay_rooms()
+    activity = Chat.player_activity(Enum.map(rooms, & &1.name), DateTime.add(now, -7, :day))
+
+    rooms
+    |> Enum.map(&{&1, Map.fetch!(activity, &1.name)})
+    |> Enum.sort_by(
+      fn {room, a} -> {a.players, a.messages, unix_or_never(a.last_message_at), room.id} end,
+      :desc
+    )
+    |> Enum.uniq_by(fn {room, _activity} -> room.scenario_id end)
+    |> Enum.take(limit)
+    |> Enum.map(fn {room, activity} -> %{room: room, players: activity.players} end)
+  end
+
+  defp unix_or_never(nil), do: -1
+  defp unix_or_never(datetime), do: DateTime.to_unix(datetime, :microsecond)
+
+  @doc """
   Returns the names of the rooms playing a scenario as a set.
   """
   def roleplay_room_names do

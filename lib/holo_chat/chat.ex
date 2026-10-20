@@ -229,6 +229,52 @@ defmodule HoloChat.Chat do
   end
 
   @doc """
+  Returns, for each of the `rooms`, how many players wrote how many
+  messages since `since` and since the room's last scenario started, and
+  when anything was last posted there (`nil` if never):
+  `%{room => %{players:, messages:, last_message_at:}}`.
+
+  Players are users writing chat messages; AI replies and announcements
+  don't count.
+  """
+  def player_activity(rooms, %DateTime{} = since) when is_list(rooms) do
+    # Ids, not timestamps: the clock can give the announcement and the next
+    # message the same time.
+    scenario_starts =
+      from m in Message,
+        where: m.room in ^rooms and m.kind == "scenario",
+        group_by: m.room,
+        select: %{room: m.room, announcement_id: max(m.id)}
+
+    counts =
+      Repo.all(
+        from m in Message,
+          left_join: s in subquery(scenario_starts),
+          on: s.room == m.room,
+          where: m.room in ^rooms and m.kind == "chat" and not m.from_assistant,
+          where: not is_nil(m.user_id) and m.inserted_at >= ^since,
+          where: is_nil(s.announcement_id) or m.id > s.announcement_id,
+          group_by: m.room,
+          select: {m.room, %{players: count(m.user_id, :distinct), messages: count(m.id)}}
+      )
+      |> Map.new()
+
+    last_messages =
+      Repo.all(
+        from m in Message,
+          where: m.room in ^rooms,
+          group_by: m.room,
+          select: {m.room, max(m.inserted_at)}
+      )
+      |> Map.new()
+
+    Map.new(rooms, fn room ->
+      activity = Map.get(counts, room, %{players: 0, messages: 0})
+      {room, Map.put(activity, :last_message_at, last_messages[room])}
+    end)
+  end
+
+  @doc """
   Gets a message by id, or nil.
   """
   def get_message(id) do

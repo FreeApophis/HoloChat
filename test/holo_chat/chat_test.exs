@@ -187,6 +187,42 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "player_activity/2" do
+    test "counts players and their messages since the last scenario started" do
+      room = unique_room()
+      gm = user_scope_fixture()
+      [ada, bob] = [user_scope_fixture(), user_scope_fixture()]
+      scenario = scenario_fixture(gm)
+
+      message_fixture(bob, room)
+      {:ok, _} = Chat.create_scenario_message(gm, room, scenario.id, scenario.title)
+      for _ <- 1..3, do: message_fixture(ada, room)
+      message_fixture(gm, room)
+      {:ok, _} = Chat.create_assistant_message(room, "Holo", "AI replies don't count")
+      {:ok, last} = Chat.create_character_message(room, "Neelix", "Neither do these", nil)
+
+      since = DateTime.add(DateTime.utc_now(), -7, :day)
+
+      assert %{^room => %{players: 2, messages: 4, last_message_at: last_at}} =
+               Chat.player_activity([room], since)
+
+      assert last_at == last.inserted_at
+    end
+
+    test "leaves out messages before `since`; rooms without messages get zeros" do
+      room = unique_room()
+      message_fixture(user_scope_fixture(), room)
+      empty = unique_room()
+
+      later = DateTime.add(DateTime.utc_now(), 1, :hour)
+
+      assert %{
+               ^room => %{players: 0, messages: 0, last_message_at: %DateTime{}},
+               ^empty => %{players: 0, messages: 0, last_message_at: nil}
+             } = Chat.player_activity([room, empty], later)
+    end
+  end
+
   describe "subscribe_rooms/0" do
     test "notifies about activity in any room", %{scope: scope, room: room} do
       Chat.subscribe_rooms()

@@ -1,44 +1,7 @@
 defmodule HoloChatWeb.HomeLive do
   use HoloChatWeb, :live_view
 
-  @destinations [
-    %{
-      id: "risa",
-      name: "Risa",
-      tagline: "Pleasure planet",
-      text:
-        "Warm surf, endless sunsets and a horga'hn on every nightstand. Take the guided tour, or just get lost at the beach bar.",
-      icon: "hero-sun",
-      gradient: "from-amber-400 via-orange-500 to-pink-500"
-    },
-    %{
-      id: "eldermere",
-      name: "Eldermere",
-      tagline: "High fantasy",
-      text:
-        "Dragons over the mountains, a tavern full of rumours and a quest that won't wait. Sharpen your sword or your wit.",
-      icon: "hero-fire",
-      gradient: "from-emerald-400 via-teal-500 to-cyan-600"
-    },
-    %{
-      id: "neon-district",
-      name: "Neon District",
-      tagline: "Cyberpunk noir",
-      text:
-        "Rain on chrome, a client with a secret and a city that never logs off. Every alley hides a story.",
-      icon: "hero-bolt",
-      gradient: "from-fuchsia-500 via-violet-600 to-indigo-700"
-    },
-    %{
-      id: "deep-station",
-      name: "Deep Station Nine-Eleven",
-      tagline: "Far frontier",
-      text:
-        "The last outpost before the unknown. Strange signals, stranger visitors, and a crew that needs a captain.",
-      icon: "hero-rocket-launch",
-      gradient: "from-sky-500 via-blue-600 to-slate-800"
-    }
-  ]
+  alias HoloChat.{News, Rooms}
 
   @features [
     %{
@@ -135,6 +98,32 @@ defmodule HoloChatWeb.HomeLive do
           </div>
         </section>
 
+        <section :if={@news != []} id="landing-news" class="mt-16">
+          <div class="flex flex-wrap items-end justify-between gap-4">
+            <div class="max-w-2xl">
+              <h2 class="text-sm font-semibold tracking-wide text-primary uppercase">News</h2>
+              <p class="mt-2 text-3xl font-bold tracking-tight text-balance">
+                Fresh from the holodeck
+              </p>
+            </div>
+            <.link
+              id="landing-all-news"
+              navigate={~p"/news"}
+              class="group inline-flex items-center gap-1 text-sm font-medium text-primary"
+            >
+              All news
+              <.icon
+                name="hero-arrow-right"
+                class="size-4 transition-transform group-hover:translate-x-0.5"
+              />
+            </.link>
+          </div>
+
+          <div class="mt-8 grid gap-4 sm:grid-cols-2">
+            <.post_card :for={post <- @news} id={"news-#{post.id}"} post={post} />
+          </div>
+        </section>
+
         <section id="landing-destinations" class="mt-16">
           <div class="max-w-2xl">
             <h2 class="text-sm font-semibold tracking-wide text-primary uppercase">Destinations</h2>
@@ -142,35 +131,62 @@ defmodule HoloChatWeb.HomeLive do
               Your next holiday is one sentence away
             </p>
             <p class="mt-3 opacity-70">
-              Every room is a world. Pick one of ours, or let a game master build yours.
+              The scenes people are playing right now. Step in, or let a game master build yours.
             </p>
           </div>
 
-          <div class="mt-8 grid gap-4 sm:grid-cols-2">
+          <div
+            :if={@destinations == []}
+            id="no-destinations"
+            class="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-base-300 py-12 text-center"
+          >
+            <.icon name="hero-map" class="size-8 opacity-60" />
+            <p class="text-sm opacity-70">No scene is running yet.</p>
+            <.link navigate={~p"/scenarios"} class="text-sm font-medium text-primary">
+              Browse the scenarios and start one
+            </.link>
+          </div>
+
+          <div id="destinations" class="mt-8 grid gap-4 sm:grid-cols-2">
             <article
-              :for={destination <- @destinations}
-              id={"destination-#{destination.id}"}
-              class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+              :for={%{room: room, players: players} <- @destinations}
+              id={"destination-#{room.name}"}
+              class="group relative overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
-              <div
-                class={[
-                  "absolute -top-16 -right-16 size-48 rounded-full bg-gradient-to-br opacity-20 blur-2xl transition-opacity group-hover:opacity-40",
-                  destination.gradient
-                ]}
-                aria-hidden="true"
-              >
+              <div class="relative aspect-video overflow-hidden bg-gradient-to-br from-sky-500 via-indigo-500 to-fuchsia-500">
+                <img
+                  :if={room.scenario.card_image_id}
+                  src={~p"/avatars/#{room.scenario.card_image_id}"}
+                  alt=""
+                  class="size-full object-cover transition duration-500 group-hover:scale-105"
+                />
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"
+                  aria-hidden="true"
+                >
+                </div>
+                <p class="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-slate-950/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">
+                  <%= if players > 0 do %>
+                    <span class="size-1.5 animate-pulse rounded-full bg-emerald-400"></span>
+                    {players} {if players == 1, do: "player", else: "players"} this week
+                  <% else %>
+                    <span class="size-1.5 rounded-full bg-slate-300"></span> Waiting for players
+                  <% end %>
+                </p>
+                <div class="absolute inset-x-0 bottom-0 p-5 text-white">
+                  <p class="text-xs font-semibold tracking-wide uppercase opacity-80">
+                    #{room.name}
+                  </p>
+                  <h3 class="mt-1 text-xl font-semibold tracking-tight">
+                    <.link navigate={~p"/rooms/#{room.name}"} class="after:absolute after:inset-0">
+                      {room.scenario.title}
+                    </.link>
+                  </h3>
+                </div>
               </div>
-              <div class={[
-                "grid size-12 place-items-center rounded-xl bg-gradient-to-br text-white shadow-md",
-                destination.gradient
-              ]}>
-                <.icon name={destination.icon} class="size-6" />
-              </div>
-              <p class="mt-4 text-xs font-semibold tracking-wide uppercase opacity-60">
-                {destination.tagline}
+              <p :if={room.scenario.topic} class="p-5 text-sm leading-relaxed opacity-75">
+                {room.scenario.topic}
               </p>
-              <h3 class="mt-1 text-xl font-semibold tracking-tight">{destination.name}</h3>
-              <p class="mt-2 text-sm leading-relaxed opacity-75">{destination.text}</p>
             </article>
           </div>
         </section>
@@ -211,7 +227,8 @@ defmodule HoloChatWeb.HomeLive do
     {:ok,
      socket
      |> assign(:page_title, "Welcome")
-     |> assign(:destinations, @destinations)
+     |> assign(:news, News.list_published_posts(2))
+     |> assign(:destinations, Rooms.list_destinations(2))
      |> assign(:features, @features)}
   end
 end

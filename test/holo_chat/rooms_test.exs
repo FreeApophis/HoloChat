@@ -82,6 +82,56 @@ defmodule HoloChat.RoomsTest do
     end
   end
 
+  describe "list_destinations/2" do
+    setup do
+      %{gm: user_scope_fixture()}
+    end
+
+    defp say(scope, room), do: {:ok, _} = Rooms.post_message(scope, room.name, %{"body" => "Hi"})
+
+    test "ranks rooms by players this week, then messages, one room per scenario",
+         %{gm: gm} do
+      few = roleplay_room_fixture(gm)
+      many = roleplay_room_fixture(gm)
+      same_scenario = roleplay_room_fixture(gm, %{"scenario_id" => many.scenario_id})
+      for _ <- 1..3, do: say(user_scope_fixture(), many)
+      for _ <- 1..2, do: say(user_scope_fixture(), same_scenario)
+      chatty = user_scope_fixture()
+      say(chatty, few)
+      say(chatty, few)
+
+      assert [first, second] = Rooms.list_destinations(2)
+      assert {first.room.id, first.players} == {many.id, 3}
+      assert {second.room.id, second.players} == {few.id, 1}
+      assert first.room.scenario.id == many.scenario_id
+    end
+
+    test "tops up with recently active rooms and stops at the limit", %{gm: gm} do
+      older = roleplay_room_fixture(gm)
+      newer = roleplay_room_fixture(gm)
+
+      assert [%{room: a, players: 0}, %{room: b, players: 0}] = Rooms.list_destinations(2)
+      assert {a.id, b.id} == {newer.id, older.id}
+      assert [_] = Rooms.list_destinations(1)
+    end
+
+    test "counts only the last 7 days", %{gm: gm} do
+      room = roleplay_room_fixture(gm)
+      say(user_scope_fixture(), room)
+
+      assert [%{players: 1}] = Rooms.list_destinations(2)
+
+      assert [%{players: 0}] =
+               Rooms.list_destinations(2, DateTime.add(DateTime.utc_now(), 8, :day))
+    end
+
+    test "leaves out chat rooms" do
+      say(user_scope_fixture(), %{name: unique_room()})
+
+      assert Rooms.list_destinations(2) == []
+    end
+  end
+
   describe "start_scenario/3" do
     setup do
       gm = user_scope_fixture()
