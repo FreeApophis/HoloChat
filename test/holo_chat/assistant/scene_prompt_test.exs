@@ -67,6 +67,12 @@ defmodule HoloChat.Assistant.ScenePromptTest do
       refute system.content =~ "gm (a player)"
     end
 
+    test "writes /me actions as actions" do
+      [_system | turns] = ScenePrompt.build(@room, @luna, [@luna], [human("ada", "/me waves")])
+
+      assert turns == [%{role: "user", content: "*ada waves*"}]
+    end
+
     test "shows players by the character they wear, played by a human" do
       riker = %Character{id: 3, name: "Riker", description: "First officer. Tall."}
       history = [%Message{username: "ada", body: "Hello.", user_id: 9, character_id: riker.id}]

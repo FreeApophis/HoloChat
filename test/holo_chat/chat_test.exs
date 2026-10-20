@@ -233,6 +233,17 @@ defmodule HoloChat.ChatTest do
     end
   end
 
+  describe "action/1" do
+    test "returns what a /me message does, or nil" do
+      assert Chat.action("/me waves happily") == "waves happily"
+      assert Chat.action("/me  waves\nand sits") == "waves\nand sits"
+      assert Chat.action("/me") == nil
+      assert Chat.action("/meow") == nil
+      assert Chat.action("say /me waves") == nil
+      assert Chat.action(nil) == nil
+    end
+  end
+
   describe "mentions?/2" do
     test "finds @name, ignoring case, outside words, e-mail addresses and code" do
       assert Chat.mentions?("hi @Ada!", "ada")

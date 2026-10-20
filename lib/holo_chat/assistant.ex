@@ -22,6 +22,7 @@ defmodule HoloChat.Assistant do
   alias HoloChat.Accounts
   alias HoloChat.Assistant.{LLM, Persona, Settings}
   alias HoloChat.Avatars
+  alias HoloChat.Chat
   alias HoloChat.Repo
 
   @pubsub HoloChat.PubSub
@@ -216,9 +217,20 @@ defmodule HoloChat.Assistant do
             %{role: "assistant", content: body}
 
           %{username: username, body: body} ->
-            %{role: "user", content: "#{username}: #{body}"}
+            %{role: "user", content: chat_line(username, body)}
         end)
     ]
+  end
+
+  @doc """
+  How someone's message reads in a prompt: "name: message", or "*name
+  waves*" for a `/me` action.
+  """
+  def chat_line(name, body) do
+    case Chat.action(body) do
+      nil -> "#{name}: #{body}"
+      action -> "*#{name} #{action}*"
+    end
   end
 
   @doc """

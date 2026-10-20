@@ -530,12 +530,23 @@ defmodule HoloChatWeb.ChatLive do
                       </button>
                     </div>
 
-                    <.markdown
-                      room_links={:patch}
-                      text={message.body}
-                      data-role="message-body"
-                      class="text-sm leading-relaxed"
-                    />
+                    <%= if action = Chat.action(message.body) do %>
+                      <div
+                        data-role="message-body"
+                        data-action
+                        class="text-sm leading-relaxed italic opacity-90"
+                      >
+                        <span class="font-semibold">{author.name}</span>
+                        <.markdown room_links={:patch} text={action} class="inline [&>p]:inline" />
+                      </div>
+                    <% else %>
+                      <.markdown
+                        room_links={:patch}
+                        text={message.body}
+                        data-role="message-body"
+                        class="text-sm leading-relaxed"
+                      />
+                    <% end %>
                   </div>
                 </div>
               </div>

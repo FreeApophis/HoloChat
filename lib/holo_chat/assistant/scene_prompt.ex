@@ -132,7 +132,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
         {"assistant", body}
 
       %{speaker: {name, _character}, body: body} ->
-        {"user", "#{name}: #{body}"}
+        {"user", Assistant.chat_line(name, body)}
     end)
     |> Enum.chunk_by(fn {role, _content} -> role end)
     |> Enum.map(fn [{role, _} | _] = chunk ->

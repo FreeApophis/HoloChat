@@ -187,6 +187,19 @@ defmodule HoloChat.Chat do
   end
 
   @doc """
+  Returns what a `/me` message says its author does ("/me waves" -> "waves"),
+  or nil for other messages.
+  """
+  def action("/me " <> rest) do
+    case String.trim(rest) do
+      "" -> nil
+      action -> action
+    end
+  end
+
+  def action(_body), do: nil
+
+  @doc """
   Returns true if `body` addresses `name` as `@name` (ignoring case), not
   inside a word, an e-mail address, a longer name or code.
   """

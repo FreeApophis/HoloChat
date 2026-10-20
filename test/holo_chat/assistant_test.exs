@@ -250,6 +250,14 @@ defmodule HoloChat.AssistantTest do
              ]
     end
 
+    test "writes /me actions as actions" do
+      persona = %Persona{name: "Holo", system_prompt: "You are {name}."}
+      history = [%Message{username: "ada", body: "/me waves at @Holo", from_assistant: false}]
+
+      assert [_system, %{role: "user", content: "*ada waves at @Holo*"}] =
+               Assistant.build_prompt(persona, history)
+    end
+
     test "presents other personas' replies like people's messages" do
       persona = %Persona{name: "Holo", system_prompt: "You are {name}."}
       history = [%Message{username: "Sage", body: "Use a GenServer.", from_assistant: true}]

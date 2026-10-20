@@ -48,6 +48,19 @@ defmodule HoloChatWeb.ChatMarkdownTest do
       assert has_element?(view, "#room-title", other)
     end
 
+    test "show /me messages as actions of their author", %{conn: conn} do
+      room = unique_room()
+      author = user_scope_fixture()
+      message = message_fixture(author, room, %{"body" => "/me waves *happily*"})
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room}")
+
+      action = "#messages-#{message.id} [data-role='message-body'][data-action]"
+      assert has_element?(view, action, author.user.username)
+      assert has_element?(view, "#{action} em", "happily")
+      refute has_element?(view, "#messages-#{message.id}", "/me")
+    end
+
     test "hide ||spoilers|| until clicked", %{conn: conn} do
       room = unique_room()
       message = message_fixture(user_scope_fixture(), room, %{"body" => "The butler ||did it||."})
