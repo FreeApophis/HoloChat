@@ -12,8 +12,8 @@ defmodule HoloChatWeb.Endpoint do
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [:peer_data, session: @session_options]],
-    longpoll: [connect_info: [:peer_data, session: @session_options]]
+    websocket: [connect_info: [:peer_data, :x_headers, session: @session_options]],
+    longpoll: [connect_info: [:peer_data, :x_headers, session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
   #
@@ -40,6 +40,8 @@ defmodule HoloChatWeb.Endpoint do
     param_key: "request_logger",
     cookie_key: "request_logger"
 
+  # The real client IP behind trusted reverse proxies (TRUSTED_PROXIES), for rate limits.
+  plug HoloChatWeb.ClientIP
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 

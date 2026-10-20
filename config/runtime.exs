@@ -72,6 +72,10 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
+  # Reverse proxies (addresses or CIDR ranges, comma-separated) whose
+  # X-Forwarded-For names the client. Without them, rate limits see the proxy.
+  config :holo_chat, :trusted_proxies, System.get_env("TRUSTED_PROXIES")
+
   config :holo_chat, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   config :holo_chat, HoloChatWeb.Endpoint,

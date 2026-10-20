@@ -6,8 +6,8 @@ defmodule HoloChatWeb.RateLimit do
   any of the given identities (client IP, username) is over its limit, so
   password guessing is slowed down both per attacker and per targeted account.
 
-  Behind a reverse proxy the client IP must be taken from a trusted
-  forwarding header (e.g. with `remote_ip`) before this is meaningful.
+  Behind a reverse proxy the client IP comes from its forwarding header, if the
+  proxy is listed in `TRUSTED_PROXIES` (see `HoloChatWeb.ClientIP`).
   """
 
   use Hammer, backend: :ets, algorithm: :fix_window_per_key

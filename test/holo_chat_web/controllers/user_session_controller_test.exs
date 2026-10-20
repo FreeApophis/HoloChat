@@ -105,6 +105,30 @@ defmodule HoloChatWeb.UserSessionControllerTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Too many attempts"
       assert redirected_to(conn) == ~p"/users/log-in"
     end
+
+    test "behind a trusted proxy, limits each forwarded client on its own", %{user: user} do
+      # config/test.exs trusts the proxies in 192.0.2.0/24.
+      proxy_conn = fn client_ip ->
+        build_conn()
+        |> Map.put(:remote_ip, {192, 0, 2, 1})
+        |> put_req_header("x-forwarded-for", "#{:inet.ntoa(client_ip)}")
+      end
+
+      attacker = unique_ip()
+
+      for _ <- 1..20 do
+        post(proxy_conn.(attacker), ~p"/users/log-in", %{
+          "user" => %{"username" => unique_username(), "password" => "wrong password!"}
+        })
+      end
+
+      conn =
+        post(proxy_conn.(unique_ip()), ~p"/users/log-in", %{
+          "user" => %{"username" => user.username, "password" => valid_user_password()}
+        })
+
+      assert get_session(conn, :user_token)
+    end
   end
 
   describe "POST /users/log-in - one-time login token" do

@@ -24,14 +24,11 @@ defmodule HoloChatWeb.UserLive.AccountComponents do
   end
 
   @doc """
-  The client IP of a LiveView connection, for rate limiting.
+  The client IP of a LiveView connection, for rate limiting (see `HoloChatWeb.ClientIP`).
 
   Only available during mount. Returns `nil` when unknown.
   """
   def client_ip(socket) do
-    case Phoenix.LiveView.get_connect_info(socket, :peer_data) do
-      %{address: address} -> address
-      _ -> nil
-    end
+    HoloChatWeb.ClientIP.from_connect_info(&Phoenix.LiveView.get_connect_info(socket, &1))
   end
 end

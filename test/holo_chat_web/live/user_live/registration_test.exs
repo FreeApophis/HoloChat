@@ -4,6 +4,7 @@ defmodule HoloChatWeb.UserLive.RegistrationTest do
   import Phoenix.LiveViewTest
   import HoloChat.AccountsFixtures
   alias HoloChat.Accounts
+  alias HoloChat.Accounts.User
 
   describe "registration page" do
     test "renders the registration form", %{conn: conn} do
@@ -112,5 +113,46 @@ defmodule HoloChatWeb.UserLive.RegistrationTest do
       assert result =~ "Too many sign-ups"
       refute Accounts.get_user_by_username(attrs.username)
     end
+
+    test "behind a trusted proxy, limits each forwarded client on its own" do
+      # config/test.exs trusts the proxies in 192.0.2.0/24.
+      proxy_conn = fn client_ip ->
+        build_conn()
+        |> Plug.Test.put_peer_data(%{address: {192, 0, 2, 1}, port: 4000, ssl_cert: nil})
+        |> put_req_header("x-forwarded-for", "#{:inet.ntoa(client_ip)}, 192.0.2.7")
+      end
+
+      first_client = proxy_conn.(unique_ip())
+      for _ <- 1..5, do: sign_up(first_client)
+
+      assert {_html, %User{}} = sign_up(proxy_conn.(unique_ip()))
+      assert {html, nil} = sign_up(first_client)
+      assert html =~ "Too many sign-ups"
+    end
+
+    test "ignores forwarding headers from untrusted clients", %{conn: conn} do
+      spoofing = fn -> put_req_header(conn, "x-forwarded-for", "#{:inet.ntoa(unique_ip())}") end
+
+      for _ <- 1..5, do: sign_up(spoofing.())
+
+      assert {html, nil} = sign_up(spoofing.())
+      assert html =~ "Too many sign-ups"
+    end
+  end
+
+  # Signs up a new user; returns the rendered result and the user, if created.
+  defp sign_up(conn) do
+    {:ok, lv, _html} = live(conn, ~p"/users/register")
+    username = unique_username()
+    password = valid_user_password()
+
+    html =
+      lv
+      |> form("#registration_form",
+        user: %{username: username, password: password, password_confirmation: password}
+      )
+      |> render_submit()
+
+    {html, Accounts.get_user_by_username(username)}
   end
 end

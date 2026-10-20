@@ -23,6 +23,10 @@ config :holo_chat, HoloChatWeb.Endpoint,
   secret_key_base: "Tc9hzUvw+l5BgueDdWTqrUxqWr7swXVwrXEqAdEmsUNNXwk5Xy7aKs4wBkZTJmRw",
   server: false
 
+# Reverse proxies that may name the client in X-Forwarded-For (TEST-NET-1;
+# ConnCase clients use 10.0.0.0/8).
+config :holo_chat, :trusted_proxies, "192.0.2.0/24"
+
 # In test we don't send emails
 config :holo_chat, HoloChat.Mailer, adapter: Swoosh.Adapters.Test
 
