@@ -6,7 +6,7 @@ defmodule HoloChat.NewsTest do
   import HoloChat.NewsFixtures
 
   alias HoloChat.{Avatars, News}
-  alias HoloChat.News.Post
+  alias HoloChat.News.{Comment, Post}
 
   setup do
     %{editor: role_scope_fixture(:news_editor), user: user_scope_fixture()}
@@ -85,6 +85,69 @@ defmodule HoloChat.NewsTest do
       refute News.get_post(nil, draft.id)
       assert News.get_post(nil, "#{published.id}").id == published.id
       refute News.get_post(nil, "nonsense")
+    end
+  end
+
+  describe "comments" do
+    setup %{editor: editor} do
+      %{post: published_post_fixture(editor)}
+    end
+
+    test "create_comment/3 adds a comment by the user and announces it",
+         %{post: post, user: user} do
+      News.subscribe_comments(post)
+
+      assert {:ok, %Comment{} = comment} =
+               News.create_comment(user, post, %{"body" => " Nice! "})
+
+      assert comment.body == "Nice!"
+      assert comment.author_id == user.user.id
+      assert comment.author.username == user.user.username
+      assert_receive {:comment_created, %Comment{id: id}}
+      assert id == comment.id
+    end
+
+    test "create_comment/3 validates and needs a user on a published post",
+         %{editor: editor, post: post, user: user} do
+      assert {:error, changeset} = News.create_comment(user, post, %{"body" => "  "})
+      assert "can't be blank" in errors_on(changeset).body
+
+      assert {:error, changeset} =
+               News.create_comment(user, post, %{"body" => String.duplicate("a", 2001)})
+
+      assert errors_on(changeset).body != []
+      assert {:error, :unauthorized} = News.create_comment(nil, post, %{"body" => "Hi"})
+
+      assert {:error, :not_published} =
+               News.create_comment(editor, post_fixture(editor), %{"body" => "Hi"})
+    end
+
+    test "list_comments/1 returns them oldest first, with authors", %{post: post, user: user} do
+      {:ok, first} = News.create_comment(user, post, %{"body" => "1"})
+      {:ok, second} = News.create_comment(user, post, %{"body" => "2"})
+
+      assert [%{id: a, author: %{}}, %{id: b}] = News.list_comments(post)
+      assert {a, b} == {first.id, second.id}
+    end
+
+    test "delete_comment/2 is for the author, moderators and news editors",
+         %{editor: editor, post: post, user: user} do
+      {:ok, mine} = News.create_comment(user, post, %{"body" => "mine"})
+      {:ok, other} = News.create_comment(user, post, %{"body" => "other"})
+      {:ok, third} = News.create_comment(user, post, %{"body" => "third"})
+      News.subscribe_comments(post)
+
+      refute News.can_delete_comment?(user_scope_fixture(), mine)
+      assert {:error, :unauthorized} = News.delete_comment(user_scope_fixture(), mine)
+      assert {:error, :unauthorized} = News.delete_comment(nil, mine)
+
+      assert {:ok, _} = News.delete_comment(user, mine)
+      assert {:ok, _} = News.delete_comment(role_scope_fixture(:moderator), other)
+      assert {:ok, _} = News.delete_comment(editor, third)
+      assert News.list_comments(post) == []
+
+      assert_receive {:comment_deleted, %Comment{id: id}}
+      assert id == mine.id
     end
   end
 

@@ -22,6 +22,7 @@ defmodule HoloChat do
       Chat,
       Chat.Message,
       News,
+      News.Comment,
       News.Post,
       Characters,
       Characters.Character,

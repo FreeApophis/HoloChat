@@ -4,17 +4,22 @@ defmodule HoloChat.News do
 
   News editors (and admins) write posts in Markdown, with an optional cover
   image. A post is a draft, seen only by news editors, until it is published.
+  Users comment on published posts; authors, moderators and news editors
+  delete comments.
   """
 
-  use Boundary, deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars], exports: [Post]
+  use Boundary,
+    deps: [HoloChat.Repo, HoloChat.Accounts, HoloChat.Avatars],
+    exports: [Comment, Post]
 
   import Ecto.Query, warn: false
 
   alias HoloChat.{Accounts, Avatars}
   alias HoloChat.Accounts.{Scope, User}
-  alias HoloChat.News.Post
+  alias HoloChat.News.{Comment, Post}
   alias HoloChat.Repo
 
+  @pubsub HoloChat.PubSub
   @cover_size {1280, 720}
 
   @doc """
@@ -134,6 +139,77 @@ defmodule HoloChat.News do
       {:ok, deleted}
     end
   end
+
+  ## Comments
+
+  @doc """
+  Subscribes to the post's comments: `{:comment_created, %Comment{}}` and
+  `{:comment_deleted, %Comment{}}`.
+  """
+  def subscribe_comments(%Post{id: id}), do: Phoenix.PubSub.subscribe(@pubsub, comments_topic(id))
+
+  @doc """
+  Returns the post's comments with their authors, oldest first.
+  """
+  def list_comments(%Post{id: post_id}) do
+    Repo.all(
+      from c in Comment,
+        where: c.post_id == ^post_id,
+        order_by: [asc: c.inserted_at, asc: c.id],
+        preload: :author
+    )
+  end
+
+  @doc """
+  Returns a changeset for writing a comment.
+  """
+  def change_comment(%Comment{} = comment, attrs \\ %{}), do: Comment.changeset(comment, attrs)
+
+  @doc """
+  Adds a comment by the scope's user to a published post and announces it.
+  """
+  def create_comment(%Scope{user: %User{} = user}, %Post{} = post, attrs) do
+    if post.published_at do
+      %Comment{post_id: post.id, author_id: user.id}
+      |> Comment.changeset(attrs)
+      |> Repo.insert()
+      |> broadcast_comment(:comment_created, user)
+    else
+      {:error, :not_published}
+    end
+  end
+
+  def create_comment(_scope, _post, _attrs), do: {:error, :unauthorized}
+
+  @doc """
+  Returns true if the scope may delete the comment: its author, a moderator
+  or a news editor (or admin).
+  """
+  def can_delete_comment?(%Scope{user: %User{id: id}}, %Comment{author_id: id}), do: true
+
+  def can_delete_comment?(scope, %Comment{}),
+    do: Accounts.moderator?(scope) or Accounts.news_editor?(scope)
+
+  @doc """
+  Deletes the comment and announces it.
+  """
+  def delete_comment(scope, %Comment{} = comment) do
+    if can_delete_comment?(scope, comment) do
+      comment |> Repo.delete() |> broadcast_comment(:comment_deleted, comment.author)
+    else
+      {:error, :unauthorized}
+    end
+  end
+
+  defp broadcast_comment({:ok, comment}, event, author) do
+    comment = %{comment | author: author}
+    Phoenix.PubSub.broadcast(@pubsub, comments_topic(comment.post_id), {event, comment})
+    {:ok, comment}
+  end
+
+  defp broadcast_comment(error, _event, _author), do: error
+
+  defp comments_topic(post_id), do: "news_comments:#{post_id}"
 
   defp author_id(%Scope{user: %User{id: id}}), do: id
 

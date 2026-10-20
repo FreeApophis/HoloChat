@@ -43,14 +43,14 @@ HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, Ra
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
                        Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar,
-                       Characters, Characters.{Character, Tags}, News, News.Post, Rooms,
+                       Characters, Characters.{Character, Tags}, News, News.{Post, Comment}, Rooms,
                        Rooms.Room, Scenarios, Scenarios.Scenario
 ├── HoloChat.Repo      sub-boundary; private to the core
 ├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (all images, stored in the DB)
 ├── HoloChat.Accounts  sub-boundary; deps: Repo, Avatars; exports User, Scope
 ├── HoloChat.Chat      sub-boundary; deps: Repo, Accounts; exports Message
-├── HoloChat.News      sub-boundary; deps: Repo, Accounts, Avatars; exports Post
-│                      (the blog on /news: drafts and published posts by news editors)
+├── HoloChat.News      sub-boundary; deps: Repo, Accounts, Avatars; exports Post, Comment
+│                      (the blog on /news: posts by news editors, comments by users)
 ├── HoloChat.Characters sub-boundary; deps: Repo, Accounts, Avatars; exports Character, Tags
 │                      (the shared character library; tags match characters to scenes)
 ├── HoloChat.Scenarios sub-boundary; deps: Repo, Accounts, Avatars, Characters; exports Scenario
