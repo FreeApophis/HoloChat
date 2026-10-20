@@ -21,6 +21,8 @@ defmodule HoloChat do
       Assistant.Server,
       Chat,
       Chat.Message,
+      News,
+      News.Post,
       Characters,
       Characters.Character,
       Characters.Tags,

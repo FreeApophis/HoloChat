@@ -6,7 +6,8 @@ defmodule HoloChatWeb.AdminLive.Users do
   @roles [
     {:admin, :is_admin, "Admin", "Grants roles and configures the assistant"},
     {:moderator, :is_moderator, "Moderator", "Manages every room"},
-    {:library_editor, :is_library_editor, "Library editor", "Edits every scenario and character"}
+    {:library_editor, :is_library_editor, "Library editor", "Edits every scenario and character"},
+    {:news_editor, :is_news_editor, "News editor", "Writes and publishes the news"}
   ]
 
   @impl true

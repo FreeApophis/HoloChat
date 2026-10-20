@@ -64,6 +64,10 @@ defmodule HoloChatWeb.Router do
 
       live "/scenarios/new", ScenarioLive.Form, :new
       live "/scenarios/:id/edit", ScenarioLive.Form, :edit
+
+      # Declared before the public /news/:id so "new" is not an id.
+      live "/news/new", NewsLive.Form, :new
+      live "/news/:id/edit", NewsLive.Form, :edit
     end
 
     post "/users/update-password", UserSessionController, :update_password
@@ -94,6 +98,8 @@ defmodule HoloChatWeb.Router do
       live "/characters", CharacterLive.Index, :index
       live "/characters/:id", CharacterLive.Show, :show
       live "/scenarios", ScenarioLive.Index, :index
+      live "/news", NewsLive.Index, :index
+      live "/news/:id", NewsLive.Show, :show
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new

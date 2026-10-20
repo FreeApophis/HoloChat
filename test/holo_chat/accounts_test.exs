@@ -484,7 +484,12 @@ defmodule HoloChat.AccountsTest do
     end
 
     test "grants and revokes site-wide roles", %{admin: admin, user: user} do
-      roles = [admin: :is_admin, moderator: :is_moderator, library_editor: :is_library_editor]
+      roles = [
+        admin: :is_admin,
+        moderator: :is_moderator,
+        library_editor: :is_library_editor,
+        news_editor: :is_news_editor
+      ]
 
       for {role, field} <- roles do
         assert {:ok, %User{} = granted} = Accounts.set_role(admin, user.id, role, true)
@@ -512,7 +517,7 @@ defmodule HoloChat.AccountsTest do
     end
   end
 
-  describe "moderator?/1 and library_editor?/1" do
+  describe "moderator?/1, library_editor?/1 and news_editor?/1" do
     test "hold for users with the role and for admins" do
       admin = role_scope_fixture(:admin)
       moderator = role_scope_fixture(:moderator)
@@ -529,6 +534,13 @@ defmodule HoloChat.AccountsTest do
       assert Accounts.library_editor?(admin)
       refute Accounts.library_editor?(moderator)
       refute Accounts.library_editor?(nil)
+
+      news_editor = role_scope_fixture(:news_editor)
+      assert Accounts.news_editor?(news_editor)
+      assert Accounts.news_editor?(admin)
+      refute Accounts.news_editor?(editor)
+      refute Accounts.news_editor?(moderator)
+      refute Accounts.news_editor?(nil)
 
       refute Accounts.admin?(moderator)
     end

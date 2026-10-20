@@ -63,6 +63,15 @@ defmodule HoloChatWeb.Layouts do
             <.icon name="hero-sparkles" class="size-5" />
           </.link>
           <.link
+            id="news-nav-link"
+            navigate={~p"/news"}
+            class="rounded-lg p-1.5 transition hover:bg-base-200"
+            aria-label="News"
+            title="News"
+          >
+            <.icon name="hero-newspaper" class="size-5" />
+          </.link>
+          <.link
             id="characters-nav-link"
             navigate={~p"/characters"}
             class="rounded-lg p-1.5 transition hover:bg-base-200"

@@ -120,10 +120,15 @@ defmodule HoloChat.Accounts do
 
   ## Roles
 
-  # Site-wide roles. Admins grant them (and may do everything moderators and
-  # library editors do); moderators manage any room; library editors edit
-  # any scenario and character.
-  @roles %{admin: :is_admin, moderator: :is_moderator, library_editor: :is_library_editor}
+  # Site-wide roles. Admins grant them (and may do everything the others do);
+  # moderators manage any room; library editors edit any scenario and
+  # character; news editors write the news.
+  @roles %{
+    admin: :is_admin,
+    moderator: :is_moderator,
+    library_editor: :is_library_editor,
+    news_editor: :is_news_editor
+  }
 
   @doc """
   Grants (`true`) or revokes (`false`) admin rights by username. Meant for
@@ -155,8 +160,14 @@ defmodule HoloChat.Accounts do
   def library_editor?(scope), do: admin?(scope)
 
   @doc """
+  Returns true if the scope belongs to a news editor or an admin.
+  """
+  def news_editor?(%Scope{user: %User{is_news_editor: true}}), do: true
+  def news_editor?(scope), do: admin?(scope)
+
+  @doc """
   Grants (`true`) or revokes (`false`) the site-wide `role` (`:admin`,
-  `:moderator` or `:library_editor`) of the user with the given id. Only
+  `:moderator`, `:library_editor` or `:news_editor`) of the user with the given id. Only
   admins may, and they cannot revoke their own admin rights.
   """
   def set_role(scope, user_id, role, granted?) when is_boolean(granted?) do

@@ -93,6 +93,7 @@ defmodule HoloChatWeb do
       import HoloChatWeb.AvatarComponents
       import HoloChatWeb.TagComponents
       import HoloChatWeb.MarkdownComponents
+      import HoloChatWeb.NewsComponents
       import HoloChatWeb.CastComponents
 
       # Common modules used in templates

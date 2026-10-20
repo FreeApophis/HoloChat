@@ -73,6 +73,15 @@ defmodule HoloChatWeb.AdminLive.UsersTest do
       assert {:ok, _form, _html} = live(as(user), ~p"/scenarios/#{scenario.id}/edit")
     end
 
+    test "makes a user news editor, who then writes news", %{conn: conn, user: user} do
+      view = open(conn, user)
+
+      view |> element("#role-#{user.id}-news_editor") |> render_click()
+
+      assert has_element?(view, "#role-#{user.id}-news_editor[data-granted='true']")
+      assert {:ok, _form, _html} = live(as(user), ~p"/news/new")
+    end
+
     test "makes a user admin, but keeps the own admin rights", %{
       conn: conn,
       admin: admin,
