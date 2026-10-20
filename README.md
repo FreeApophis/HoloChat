@@ -166,17 +166,21 @@ container name as `DATABASE_HOST` instead.
 server and Erlang/OTP and Elixir installed (see Requirements):
 
 ```sh
-export MIX_ENV=prod
-mix deps.get --only prod
-mix compile
-mix assets.deploy
-mix release
+scripts/build-release.sh
 
 # With the environment variables from step 2 set:
 _build/prod/rel/holo_chat/bin/migrate
 _build/prod/rel/holo_chat/bin/server
 ```
 
+On Windows, build with
+`powershell -ExecutionPolicy Bypass -File scripts\build-release.ps1` and run
+`bin\migrate.bat` and `bin\server.bat`. Stop a running release before
+rebuilding it: Windows can't replace files that are in use, so the script
+refuses to start while the release (or its `epmd`) is still running.
+
+The script fetches the dependencies, compiles, builds the assets and the
+release, and then removes the digested assets from `priv/static` again.
 Copy `_build/prod/rel/holo_chat` to the server if you built it elsewhere; it
 contains the Erlang runtime and needs no Elixir there. Run `bin/server` from
 systemd or a similar service manager.
