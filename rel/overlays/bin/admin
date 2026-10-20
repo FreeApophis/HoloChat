@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Usage: bin/admin grant|revoke USERNAME
+case "${1:-}" in
+  grant) fun=grant_admin ;;
+  revoke) fun=revoke_admin ;;
+  *) echo "Usage: $0 grant|revoke USERNAME" >&2; exit 1 ;;
+esac
+[ $# -eq 2 ] || { echo "Usage: $0 grant|revoke USERNAME" >&2; exit 1; }
+
+cd -P -- "$(dirname -- "$0")"
+HOLO_USERNAME="$2" exec ./holo_chat eval "HoloChat.Release.$fun(System.get_env(~s(HOLO_USERNAME)))"

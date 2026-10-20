@@ -41,22 +41,47 @@ if config_env() == :dev do
 end
 
 if config_env() == :prod do
-  database_url =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      environment variable DATABASE_URL is missing.
-      For example: ecto://USER:PASS@HOST/DATABASE
-      """
+  # The database is either one DATABASE_URL or its parts (DATABASE_HOST, ...).
+  # The parts need no URL-encoding, so they suit passwords with special characters.
+  database =
+    case System.get_env("DATABASE_URL") do
+      url when url not in [nil, ""] ->
+        [url: url]
+
+      _ ->
+        [
+          hostname: System.get_env("DATABASE_HOST", "localhost"),
+          port: String.to_integer(System.get_env("DATABASE_PORT", "5432")),
+          database: System.get_env("DATABASE_NAME", "holo_chat_prod"),
+          username:
+            System.get_env("DATABASE_USER") ||
+              raise("""
+              environment variable DATABASE_URL (or DATABASE_USER and DATABASE_PASSWORD) is missing.
+              For example: ecto://USER:PASS@HOST/DATABASE
+              """),
+          password: System.get_env("DATABASE_PASSWORD", "")
+        ]
+    end
+
+  # DATABASE_SSL=true verifies the server certificate against the system CAs, or
+  # against DATABASE_SSL_CA_CERT (a PEM file) for a private CA.
+  database_ssl =
+    cond do
+      System.get_env("DATABASE_SSL") not in ~w(true 1) -> false
+      ca_cert = System.get_env("DATABASE_SSL_CA_CERT") -> [cacertfile: ca_cert]
+      true -> true
+    end
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
-  config :holo_chat, HoloChat.Repo,
-    # ssl: true,
-    url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    # For machines with several cores, consider starting multiple pools of `pool_size`
-    # pool_count: 4,
-    socket_options: maybe_ipv6
+  config :holo_chat,
+         HoloChat.Repo,
+         database ++
+           [
+             ssl: database_ssl,
+             pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+             socket_options: maybe_ipv6
+           ]
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
