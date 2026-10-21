@@ -7,7 +7,7 @@ defmodule HoloChatWeb.UserLive.Profile do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-md space-y-6 overflow-y-auto py-8">
+      <div class="mx-auto w-full max-w-md space-y-6 py-8">
         <.header>
           Your profile
           <:subtitle>Other people see this when they click your name in the chat.</:subtitle>

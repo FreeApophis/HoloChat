@@ -28,7 +28,7 @@ defmodule HoloChatWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div id="landing" class="-mx-4 -my-4 min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:-mx-6 sm:px-6">
+      <div id="landing">
         <section
           id="landing-hero"
           class="relative isolate overflow-hidden rounded-3xl bg-slate-950 px-6 py-16 text-white shadow-xl sm:px-12 sm:py-24"

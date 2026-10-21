@@ -8,7 +8,7 @@ defmodule HoloChatWeb.CharacterLive.Form do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-2xl overflow-y-auto py-8">
+      <div class="mx-auto w-full max-w-2xl py-8">
         <.header>
           {@page_title}
           <:subtitle>

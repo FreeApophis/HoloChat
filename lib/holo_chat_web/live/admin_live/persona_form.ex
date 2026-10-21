@@ -8,7 +8,7 @@ defmodule HoloChatWeb.AdminLive.PersonaForm do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-xl space-y-6 overflow-y-auto py-6">
+      <div class="mx-auto w-full max-w-xl space-y-6 py-6">
         <.header>
           {@page_title}
           <:subtitle>

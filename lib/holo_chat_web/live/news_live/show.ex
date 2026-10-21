@@ -8,7 +8,7 @@ defmodule HoloChatWeb.NewsLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <article id="post" class="mx-auto w-full max-w-3xl min-h-0 flex-1 overflow-y-auto py-6">
+      <article id="post" class="mx-auto w-full max-w-3xl py-6">
         <.link
           navigate={~p"/news"}
           class="inline-flex items-center gap-1 text-sm opacity-70 transition hover:opacity-100"

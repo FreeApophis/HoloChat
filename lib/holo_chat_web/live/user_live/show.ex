@@ -14,7 +14,7 @@ defmodule HoloChatWeb.UserLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-3xl min-h-0 flex-1 space-y-8 overflow-y-auto py-6">
+      <div class="mx-auto w-full max-w-3xl space-y-8 py-6">
         <header class="relative overflow-hidden rounded-3xl border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8">
           <div
             class="absolute -top-20 -right-20 size-64 rounded-full bg-gradient-to-br from-sky-500/20 via-indigo-500/20 to-fuchsia-500/20 blur-3xl"

@@ -7,7 +7,7 @@ defmodule HoloChatWeb.NewsLive.Index do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="min-h-0 flex-1 overflow-y-auto">
+      <div>
         <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">

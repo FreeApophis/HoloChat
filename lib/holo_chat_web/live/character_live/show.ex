@@ -7,7 +7,7 @@ defmodule HoloChatWeb.CharacterLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-2xl overflow-y-auto py-6">
+      <div class="mx-auto w-full max-w-2xl py-6">
         <.link navigate={~p"/characters"} class="text-sm opacity-60 hover:underline">
           ← All characters
         </.link>

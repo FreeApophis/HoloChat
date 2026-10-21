@@ -7,7 +7,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-2xl space-y-10 overflow-y-auto py-8">
+      <div class="mx-auto w-full max-w-2xl space-y-10 py-8">
         <.header>
           Scene settings
           <:subtitle>

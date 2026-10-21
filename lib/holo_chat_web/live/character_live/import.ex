@@ -9,7 +9,7 @@ defmodule HoloChatWeb.CharacterLive.Import do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-5xl overflow-y-auto py-8">
+      <div class="mx-auto w-full max-w-5xl py-8">
         <.header>
           Import a character card
           <:subtitle>

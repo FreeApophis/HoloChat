@@ -14,7 +14,7 @@ defmodule HoloChatWeb.AdminLive.Users do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="mx-auto w-full max-w-3xl space-y-6 overflow-y-auto py-6">
+      <div class="mx-auto w-full max-w-3xl space-y-6 py-6">
         <.header>
           Users and roles
           <:subtitle>

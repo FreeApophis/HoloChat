@@ -152,7 +152,7 @@ defmodule HoloChatWeb.Layouts do
         </nav>
       </header>
 
-      <main class="flex min-h-0 flex-1 flex-col px-4 py-4 sm:px-6">
+      <main class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6">
         <div class="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
           {render_slot(@inner_block)}
         </div>
