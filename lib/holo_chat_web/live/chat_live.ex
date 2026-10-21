@@ -636,8 +636,8 @@ defmodule HoloChatWeb.ChatLive do
 
           <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollToBottom">
             // Keeps the message list pinned to the newest message while the reader is
-            // at the bottom, and keeps the visible messages still when older ones are
-            // inserted above them.
+            // at the bottom, also when a message grows in place (a regenerated reply),
+            // and keeps the visible messages still when older ones are inserted above.
             export default {
               mounted() {
                 this.messages = this.el.querySelector("#messages")
@@ -645,10 +645,15 @@ defmodule HoloChatWeb.ChatLive do
                 this.firstMessage = this.messages.firstElementChild
                 this.observer = new MutationObserver(() => this.onMessagesChanged())
                 this.observer.observe(this.messages, {childList: true})
+                this.resizeObserver = new ResizeObserver(() => this.onMessagesResized())
+                this.resizeObserver.observe(this.messages)
                 this.el.addEventListener("scroll", () => this.remember())
                 this.handleEvent("chat:room-entered", () => this.scroll())
               },
-              destroyed() { this.observer.disconnect() },
+              destroyed() {
+                this.observer.disconnect()
+                this.resizeObserver.disconnect()
+              },
               onMessagesChanged() {
                 const first = this.messages.firstElementChild
                 if (this.nearBottom) {
@@ -658,6 +663,9 @@ defmodule HoloChatWeb.ChatLive do
                 }
                 this.firstMessage = first
                 this.remember()
+              },
+              onMessagesResized() {
+                if (this.nearBottom) this.scroll()
               },
               remember() {
                 const el = this.el
