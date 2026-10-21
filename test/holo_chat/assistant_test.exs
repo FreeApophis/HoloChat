@@ -250,6 +250,35 @@ defmodule HoloChat.AssistantTest do
                })
     end
 
+    test "have a language and are listed by language", %{admin: admin} do
+      {:ok, german} =
+        Assistant.create_prompt_template(admin, %{
+          "name" => template_name(),
+          "body" => "x",
+          "language" => "de"
+        })
+
+      {:ok, english} =
+        Assistant.create_prompt_template(admin, %{"name" => template_name(), "body" => "x"})
+
+      assert english.language == "en"
+      assert german in Assistant.list_prompt_templates("de")
+      refute english in Assistant.list_prompt_templates("de")
+
+      assert {:error, changeset} =
+               Assistant.create_prompt_template(admin, %{
+                 "name" => template_name(),
+                 "body" => "x",
+                 "language" => "xx"
+               })
+
+      assert %{language: [_]} = errors_on(changeset)
+    end
+
+    test "each language has a built-in template" do
+      assert Assistant.default_prompt_template("de") =~ "Du spielst {{char}}"
+    end
+
     test "the built-in template is today's scene prompt" do
       assert Assistant.default_prompt_template() =~ "You are playing {{char}}"
       assert Assistant.default_prompt_template() =~ "{{others}}"

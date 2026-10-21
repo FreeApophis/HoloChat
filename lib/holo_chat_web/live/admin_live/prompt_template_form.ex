@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.Assistant
+  alias HoloChat.{Assistant, Rooms}
   alias HoloChat.Assistant.PromptTemplate
 
   @placeholders [
@@ -45,7 +45,7 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
 
           <.link
             id="copy-standard-template"
-            navigate={~p"/admin/assistant/templates/new"}
+            navigate={~p"/admin/assistant/templates/new?language=#{@language}"}
             class="btn btn-primary"
           >
             <.icon name="hero-document-duplicate" class="size-4" /> New template from this one
@@ -59,6 +59,12 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
             class="space-y-1"
           >
             <.input field={@form[:name]} type="text" label="Name (shown to game masters)" />
+            <.input
+              field={@form[:language]}
+              type="select"
+              label="Language (offered in rooms that speak it)"
+              options={Enum.map(Rooms.languages(), fn {code, name} -> {name, code} end)}
+            />
             <.input
               field={@form[:body]}
               type="textarea"
@@ -99,19 +105,29 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
   end
 
   @impl true
-  def mount(_params, _session, %{assigns: %{live_action: :standard}} = socket) do
+  def mount(params, _session, %{assigns: %{live_action: :standard}} = socket) do
+    language = language(params)
+    name = Map.new(Rooms.languages())[language]
+
     {:ok,
      socket
-     |> assign(:page_title, "Standard template")
+     |> assign(:page_title, "Standard template (#{name})")
+     |> assign(:language, language)
      |> assign(:placeholders, @placeholders)
-     |> assign(:standard, Assistant.default_prompt_template())}
+     |> assign(:standard, Assistant.default_prompt_template(language))}
   end
 
   def mount(params, _session, socket) do
     {template, attrs} =
       case socket.assigns.live_action do
-        :new -> {%PromptTemplate{}, %{"body" => Assistant.default_prompt_template()}}
-        :edit -> {Assistant.get_prompt_template(params["id"]), %{}}
+        :new ->
+          language = language(params)
+
+          {%PromptTemplate{},
+           %{"body" => Assistant.default_prompt_template(language), "language" => language}}
+
+        :edit ->
+          {Assistant.get_prompt_template(params["id"]), %{}}
       end
 
     case template do
@@ -168,6 +184,13 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
 
   defp assign_form(socket, changeset),
     do: assign(socket, :form, to_form(changeset, as: :prompt_template))
+
+  # A known language from the query string, English otherwise.
+  defp language(%{"language" => code}) do
+    if List.keymember?(Rooms.languages(), code, 0), do: code, else: "en"
+  end
+
+  defp language(_params), do: "en"
 
   defp page_title(:new, _template), do: "New prompt template"
   defp page_title(:edit, template), do: "Edit #{template.name}"

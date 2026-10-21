@@ -35,7 +35,12 @@ defmodule HoloChat.Assistant.Server do
   alias HoloChat.Assistant.{Director, LLM, ScenePrompt}
 
   @max_queue 10
-  @apology "Sorry, I can't answer right now. Please try again later."
+  # By room language; rooms without a record speak English.
+  @apologies %{
+    "en" => "Sorry, I can't answer right now. Please try again later.",
+    "de" =>
+      "Entschuldigung, ich kann gerade nicht antworten. Bitte versuche es später noch einmal."
+  }
 
   # Generation settings for cast characters.
   @scene_history 30
@@ -361,9 +366,7 @@ defmodule HoloChat.Assistant.Server do
          cast = Rooms.list_ai_cast(room),
          %{} = character <- Enum.find(cast, &(&1.id == character.id)) || {:error, :not_cast},
          worn = worn_characters(history),
-         template = Assistant.get_prompt_template(room.prompt_template_id),
-         prompt =
-           ScenePrompt.build(room, character, cast, history, worn, template && template.body),
+         prompt = ScenePrompt.build(room, character, cast, history, worn, template_body(room)),
          {:ok, text} <-
            LLM.impl().chat(endpoint_url, prompt,
              max_tokens: @scene_max_tokens,
@@ -373,6 +376,16 @@ defmodule HoloChat.Assistant.Server do
         nil -> {:error, :empty_reply}
         reply -> {:ok, reply}
       end
+    end
+  end
+
+  # The room's template, unless it is in another language than the room
+  # speaks (the game masters switched languages): then the Standard one of
+  # the room's language (nil).
+  defp template_body(room) do
+    case Assistant.get_prompt_template(room.prompt_template_id) do
+      %{language: language, body: body} when language == room.language -> body
+      _none_or_other_language -> nil
     end
   end
 
@@ -399,7 +412,15 @@ defmodule HoloChat.Assistant.Server do
 
   defp post_reply({:error, reason}, {:persona, persona, message}) do
     Logger.warning("Assistant #{persona.name} could not answer: #{inspect(reason)}")
-    Chat.create_assistant_message(message.room, persona.name, @apology, persona_id: persona.id)
+
+    language =
+      case Rooms.get_room(message.room) do
+        nil -> "en"
+        room -> room.language
+      end
+
+    apology = Map.fetch!(@apologies, language)
+    Chat.create_assistant_message(message.room, persona.name, apology, persona_id: persona.id)
   end
 
   defp post_reply({:ok, reply}, {:character, room_name, character}) do

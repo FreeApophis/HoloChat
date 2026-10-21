@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.AdminLive.Assistant do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.Assistant
+  alias HoloChat.{Assistant, Rooms}
 
   @impl true
   def render(assigns) do
@@ -178,17 +178,22 @@ defmodule HoloChatWeb.AdminLive.Assistant do
             </.link>
           </div>
           <ul class="divide-y divide-base-300 rounded-xl border border-base-300">
-            <li id="prompt-template-standard" class="flex items-center gap-3 px-3 py-2 text-sm">
+            <li
+              :for={{code, name} <- @languages}
+              id={"prompt-template-standard#{standard_suffix(code)}"}
+              class="flex items-center gap-3 px-3 py-2 text-sm"
+            >
               <.icon name="hero-document-text" class="size-4 opacity-60" />
               <span class="font-semibold">Standard</span>
+              <.language_badge language={code} />
               <span class="min-w-0 flex-1 truncate opacity-70">
                 built in, used unless a scene picks another
               </span>
               <.link
-                id="view-prompt-template-standard"
-                navigate={~p"/admin/assistant/templates/standard"}
+                id={"view-prompt-template-standard#{standard_suffix(code)}"}
+                navigate={~p"/admin/assistant/templates/standard?language=#{code}"}
                 class="rounded-lg p-1.5 transition hover:bg-base-200"
-                aria-label="View the Standard template"
+                aria-label={"View the Standard template in #{name}"}
               >
                 <.icon name="hero-eye" class="size-4" />
               </.link>
@@ -199,7 +204,9 @@ defmodule HoloChatWeb.AdminLive.Assistant do
               class="flex items-center gap-3 px-3 py-2 text-sm"
             >
               <.icon name="hero-document-text" class="size-4 opacity-60" />
-              <span class="min-w-0 flex-1 truncate font-semibold">{template.name}</span>
+              <span class="min-w-0 truncate font-semibold">{template.name}</span>
+              <.language_badge language={template.language} />
+              <span class="flex-1"></span>
               <.link
                 id={"edit-prompt-template-#{template.id}"}
                 navigate={~p"/admin/assistant/templates/#{template.id}/edit"}
@@ -234,6 +241,7 @@ defmodule HoloChatWeb.AdminLive.Assistant do
      |> assign(:connection, nil)
      |> assign(:personas, Assistant.list_personas())
      |> assign(:prompt_templates, Assistant.list_prompt_templates())
+     |> assign(:languages, Rooms.languages())
      |> assign_form(Assistant.change_settings(Assistant.get_settings()))}
   end
 
@@ -323,4 +331,8 @@ defmodule HoloChatWeb.AdminLive.Assistant do
   defp describe_error(:no_models), do: "the server serves no models"
   defp describe_error({:http_status, status}), do: "the server answered with HTTP #{status}"
   defp describe_error(reason), do: inspect(reason)
+
+  # English keeps the plain ids; other languages add their code.
+  defp standard_suffix("en"), do: ""
+  defp standard_suffix(code), do: "-#{code}"
 end

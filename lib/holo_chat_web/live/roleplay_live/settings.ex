@@ -135,10 +135,13 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
               field={@form[:prompt_template_id]}
               type="select"
               label="Prompt template"
-              options={[{"Standard (built-in)", ""} | @template_options]}
+              options={[
+                {"Standard (built-in)", ""}
+                | template_options(@templates, @form[:language].value)
+              ]}
             />
             <p class="text-xs opacity-60">
-              How the cast is told to play their characters. Admins write the templates.
+              How the cast is told to play their characters, in the room's language. Admins write the templates.
             </p>
           </fieldset>
 
@@ -218,10 +221,7 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
        socket
        |> assign(:page_title, "Scene settings")
        |> assign(:scenario_options, Enum.map(Scenarios.list_scenarios(), &{&1.title, &1.id}))
-       |> assign(
-         :template_options,
-         Enum.map(Assistant.list_prompt_templates(), &{&1.name, &1.id})
-       )
+       |> assign(:templates, Assistant.list_prompt_templates())
        |> assign(:master_form, to_form(%{"username" => ""}, as: :master))
        |> assign(:search_form, to_form(%{"query" => ""}, as: :search))
        |> assign_room(room)
@@ -390,4 +390,9 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
 
   defp scenario_tags(%{scenario: nil}), do: []
   defp scenario_tags(%{scenario: scenario}), do: scenario.tags
+
+  # The templates in the language chosen in the form.
+  defp template_options(templates, language) do
+    for t <- templates, t.language == (language || "en"), do: {t.name, t.id}
+  end
 end

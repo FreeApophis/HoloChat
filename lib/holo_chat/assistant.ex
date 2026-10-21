@@ -159,16 +159,21 @@ defmodule HoloChat.Assistant do
   ## Prompt templates
 
   @doc """
-  The built-in prompt template for cast characters, used by rooms that chose
-  none. See `HoloChat.Assistant.ScenePrompt` for its placeholders.
+  The built-in Standard prompt template for cast characters in `language`,
+  used by rooms that chose none. See `HoloChat.Assistant.ScenePrompt` for
+  its placeholders.
   """
-  def default_prompt_template, do: ScenePrompt.default_template()
+  def default_prompt_template(language \\ "en"), do: ScenePrompt.default_template(language)
 
   @doc """
-  Returns all prompt templates, ordered by name.
+  Returns the prompt templates, ordered by name: all of them, or those in
+  `language`.
   """
-  def list_prompt_templates do
-    Repo.all(from t in PromptTemplate, order_by: [t.name, t.id])
+  def list_prompt_templates(language \\ nil) do
+    PromptTemplate
+    |> then(&if(language, do: where(&1, language: ^language), else: &1))
+    |> order_by([t], [t.name, t.id])
+    |> Repo.all()
   end
 
   @doc """

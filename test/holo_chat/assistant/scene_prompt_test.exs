@@ -163,6 +163,32 @@ defmodule HoloChat.Assistant.ScenePromptTest do
     end
   end
 
+  describe "build/6 in a German room" do
+    test "uses the German Standard template and German labels" do
+      room = %{@room | language: "de"}
+      riker = %Character{id: 3, name: "Riker", description: "Erster Offizier."}
+
+      history = [
+        human("ada", "Hallo"),
+        %Message{username: "bob", body: "Hi.", user_id: 8, character_id: riker.id},
+        character(@luna, "Hallo zusammen.")
+      ]
+
+      [system | turns] = ScenePrompt.build(room, @luna, [@luna], history, %{riker.id => riker})
+
+      assert system.content =~ "Du spielst Luna"
+      assert system.content =~ "Persönlichkeit:"
+      assert system.content =~ "- ada (Spieler)"
+      assert system.content =~ "- Riker (gespielt von einem Menschen): Erster Offizier."
+      assert List.last(turns) == %{role: "user", content: "(Die Szene geht weiter.)"}
+    end
+
+    test "each language has its own Standard template" do
+      assert ScenePrompt.default_template("en") == ScenePrompt.default_template()
+      assert ScenePrompt.default_template("de") =~ "Du spielst {{char}}"
+    end
+  end
+
   describe "clean/3" do
     test "drops a leading name and stops where the model writes for someone else" do
       text = "Luna: *looks up* Oh, hello.\nNeville: Hi Luna!\nLuna: More."

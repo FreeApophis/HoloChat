@@ -79,6 +79,50 @@ defmodule HoloChatWeb.SceneRepliesTest do
     assert has_element?(view, "#profile-card", "Dreamy Ravenclaw.")
   end
 
+  test "in a German room, the cast is told to play in German", %{gm: gm, room: room} do
+    {:ok, _room} = Rooms.update_room(gm, room, %{"language" => "de"})
+    start_server()
+    {player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      system = hd(messages).content
+      assert system =~ "Du spielst Luna Lovegood"
+      assert system =~ "A tea party in the Burrow."
+      assert system =~ "- #{player.username} (Spieler)"
+      refute system =~ "You are playing"
+      {:ok, "Guten Abend!"}
+    end)
+
+    view |> form("#message-form", message: %{body: "Guten Abend!"}) |> render_submit()
+
+    assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+  end
+
+  test "a template in another language than the room's gives way to the room's Standard",
+       %{gm: gm, room: room} do
+    {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+    {:ok, template} =
+      Assistant.create_prompt_template(user_scope_fixture(admin), %{
+        "name" => "Rhymes #{System.unique_integer([:positive])}",
+        "body" => "{{char}} speaks in rhyme."
+      })
+
+    {:ok, room} = Rooms.update_room(gm, room, %{"prompt_template_id" => template.id})
+    {:ok, _room} = Rooms.update_room(gm, room, %{"language" => "de"})
+    start_server()
+    {_player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      assert hd(messages).content =~ "Du spielst Luna Lovegood"
+      {:ok, "Guten Abend!"}
+    end)
+
+    view |> form("#message-form", message: %{body: "Guten Abend!"}) |> render_submit()
+
+    assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+  end
+
   test "the cast speaks with the room's prompt template", %{gm: gm, room: room} do
     {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
 

@@ -62,6 +62,43 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateFormTest do
       assert has_element?(new_view, "#prompt-template-form textarea", "You are playing {{char}}")
     end
 
+    test "writes templates in another language, starting from its Standard",
+         %{conn: conn} do
+      {:ok, overview, _html} = live(conn, ~p"/admin/assistant")
+      assert has_element?(overview, "#prompt-template-standard-de [data-role='language']", "DE")
+
+      {:ok, standard, _html} =
+        overview
+        |> element("#view-prompt-template-standard-de")
+        |> render_click()
+        |> follow_redirect(conn)
+
+      assert has_element?(standard, "#standard-template-body", "Du spielst {{char}}")
+
+      {:ok, view, _html} =
+        standard |> element("#copy-standard-template") |> render_click() |> follow_redirect(conn)
+
+      assert has_element?(view, "#prompt-template-form textarea", "Du spielst {{char}}")
+      assert has_element?(view, "#prompt-template-form select option[value='de'][selected]")
+
+      name = "Reime #{System.unique_integer([:positive])}"
+
+      {:ok, overview, _html} =
+        view
+        |> form("#prompt-template-form", prompt_template: %{name: name, body: "Reime, {{char}}."})
+        |> render_submit()
+        |> follow_redirect(conn, ~p"/admin/assistant")
+
+      template = Enum.find(Assistant.list_prompt_templates(), &(&1.name == name))
+      assert template.language == "de"
+
+      assert has_element?(
+               overview,
+               "#prompt-template-#{template.id} [data-role='language']",
+               "DE"
+             )
+    end
+
     test "edits and deletes a template", %{conn: conn, admin: admin} do
       {:ok, template} =
         Assistant.create_prompt_template(admin, %{

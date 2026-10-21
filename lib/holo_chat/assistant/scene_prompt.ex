@@ -24,36 +24,74 @@ defmodule HoloChat.Assistant.ScenePrompt do
 
   alias HoloChat.Assistant
 
-  @default_template """
-  You are playing {{char}} in a group role-play with several participants. \
-  Write only {{char}}'s next message: what {{char}} says and does, in character. \
-  Put actions in *asterisks*. Never write lines or actions for anyone else, \
-  and don't narrate the scene. Keep it to one or two short paragraphs.
+  # The built-in Standard template of each room language (see
+  # HoloChat.Rooms.languages/0), and the words the prompt adds itself.
+  @default_templates %{
+    "en" => """
+    You are playing {{char}} in a group role-play with several participants. \
+    Write only {{char}}'s next message: what {{char}} says and does, in character. \
+    Put actions in *asterisks*. Never write lines or actions for anyone else, \
+    and don't narrate the scene. Keep it to one or two short paragraphs.
 
-  # Scene: {{scenario_title}}
-  {{scenario}}
+    # Scene: {{scenario_title}}
+    {{scenario}}
 
-  # {{char}}
-  {{description}}
+    # {{char}}
+    {{description}}
 
-  Personality:
-  {{personality}}
+    Personality:
+    {{personality}}
 
-  # Others in the scene
-  {{others}}
-  """
+    # Others in the scene
+    {{others}}
+    """,
+    "de" => """
+    Du spielst {{char}} in einem Gruppen-Rollenspiel mit mehreren Teilnehmenden. \
+    Schreibe nur die nächste Nachricht von {{char}}: was {{char}} sagt und tut, \
+    ganz in der Rolle. Setze Handlungen in *Sternchen*. Schreibe nie Zeilen oder \
+    Handlungen für andere und erzähle die Szene nicht. Halte dich an ein oder zwei \
+    kurze Absätze. Schreibe auf Deutsch.
+
+    # Szene: {{scenario_title}}
+    {{scenario}}
+
+    # {{char}}
+    {{description}}
+
+    Persönlichkeit:
+    {{personality}}
+
+    # Weitere Anwesende
+    {{others}}
+    """
+  }
+
+  @words %{
+    "en" => %{
+      player: "a player",
+      human: "played by a human player",
+      continues: "(The scene continues.)"
+    },
+    "de" => %{
+      player: "Spieler",
+      human: "gespielt von einem Menschen",
+      continues: "(Die Szene geht weiter.)"
+    }
+  }
 
   @placeholders ~w(char description personality scenario_title scenario others)
 
   @doc """
-  The built-in template, used by rooms that chose none.
+  The built-in Standard template in `language`, used by rooms that chose
+  none.
   """
-  def default_template, do: @default_template
+  def default_template(language \\ "en"), do: Map.fetch!(@default_templates, language)
 
   @doc """
   Builds the chat completion messages for `character` in `room` with the
   scene's `cast` and recent `history` (oldest first), with the system
-  prompt written from `template` (the built-in one when nil).
+  prompt written from `template` (the Standard one of the room's language
+  when nil). The words the prompt adds itself follow the room's language.
 
   The character's own messages are assistant turns; everything else is
   merged into user turns of "Name: message" lines, which keeps turns
@@ -64,14 +102,19 @@ defmodule HoloChat.Assistant.ScenePrompt do
   human.
   """
   def build(room, character, cast, history, worn \\ %{}, template \\ nil) do
+    language = room.language || "en"
+    words = Map.fetch!(@words, language)
+
     history =
       history
       |> since_scenario_change()
       |> Enum.map(&Map.put(&1, :speaker, speaker(&1, worn)))
 
+    template = template || default_template(language)
+
     [
-      %{role: "system", content: system_prompt(template, room, character, cast, history)}
-      | turns(character, history)
+      %{role: "system", content: system_prompt(template, room, character, cast, history, words)}
+      | turns(character, history, words)
     ]
   end
 
@@ -87,7 +130,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
 
   defp speaker(%{username: username}, _worn), do: {username, nil}
 
-  defp system_prompt(template, room, character, cast, history) do
+  defp system_prompt(template, room, character, cast, history, words) do
     scenario = room.scenario || %{title: nil, description: nil}
 
     values = %{
@@ -96,10 +139,10 @@ defmodule HoloChat.Assistant.ScenePrompt do
       "personality" => character.personality,
       "scenario_title" => scenario.title,
       "scenario" => scenario.description,
-      "others" => Enum.join(others(character, cast, history), "\n")
+      "others" => Enum.join(others(character, cast, history, words), "\n")
     }
 
-    render(template || @default_template, values)
+    render(template, values)
   end
 
   defp render(template, values) do
@@ -150,7 +193,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
     end
   end
 
-  defp others(character, cast, history) do
+  defp others(character, cast, history, words) do
     characters =
       for other <- cast, other.id != character.id do
         "- #{other.name}" <> summary(other.description)
@@ -159,15 +202,15 @@ defmodule HoloChat.Assistant.ScenePrompt do
     players =
       for %{persona_id: nil, from_assistant: false, speaker: speaker} <- history,
           uniq: true,
-          do: player_line(speaker)
+          do: player_line(speaker, words)
 
     characters ++ players
   end
 
-  defp player_line({name, nil}), do: "- #{name} (a player)"
+  defp player_line({name, nil}, words), do: "- #{name} (#{words.player})"
 
-  defp player_line({name, character}) do
-    "- #{name} (played by a human player)" <> summary(character.description)
+  defp player_line({name, character}, words) do
+    "- #{name} (#{words.human})" <> summary(character.description)
   end
 
   # The first sentence of a description, so others are known but brief.
@@ -180,7 +223,7 @@ defmodule HoloChat.Assistant.ScenePrompt do
     end
   end
 
-  defp turns(character, history) do
+  defp turns(character, history, words) do
     history
     |> Enum.map(fn
       %{from_assistant: true, character_id: id, body: body} when id == character.id ->
@@ -193,13 +236,13 @@ defmodule HoloChat.Assistant.ScenePrompt do
     |> Enum.map(fn [{role, _} | _] = chunk ->
       %{role: role, content: Enum.map_join(chunk, "\n", fn {_role, content} -> content end)}
     end)
-    |> ensure_user_last()
+    |> ensure_user_last(words)
   end
 
-  defp ensure_user_last(turns) do
+  defp ensure_user_last(turns, words) do
     case List.last(turns) do
       %{role: "user"} -> turns
-      _assistant_or_none -> turns ++ [%{role: "user", content: "(The scene continues.)"}]
+      _assistant_or_none -> turns ++ [%{role: "user", content: words.continues}]
     end
   end
 

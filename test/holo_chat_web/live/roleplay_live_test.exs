@@ -193,6 +193,38 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(room_view, "#room-language", "DE")
     end
 
+    test "offer the prompt templates of the room's language", %{conn: conn, room: room} do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+      admin = user_scope_fixture(admin)
+      english = "Rhymes #{System.unique_integer([:positive])}"
+      german = "Reime #{System.unique_integer([:positive])}"
+
+      {:ok, _} =
+        Assistant.create_prompt_template(admin, %{"name" => english, "body" => "Rhyme."})
+
+      {:ok, reime} =
+        Assistant.create_prompt_template(admin, %{
+          "name" => german,
+          "body" => "Reime.",
+          "language" => "de"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+      assert has_element?(view, "#scene-form option", english)
+      refute has_element?(view, "#scene-form option", german)
+
+      view |> form("#scene-form", room: %{language: "de"}) |> render_change()
+      assert has_element?(view, "#scene-form option", german)
+      refute has_element?(view, "#scene-form option", english)
+
+      view
+      |> form("#scene-form", room: %{language: "de", prompt_template_id: reime.id})
+      |> render_submit()
+
+      assert %{language: "de", prompt_template_id: id} = Rooms.get_room(room.name)
+      assert id == reime.id
+    end
+
     test "let game masters choose the cast's prompt template", %{conn: conn, room: room} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
       name = "Rhymes #{System.unique_integer([:positive])}"
