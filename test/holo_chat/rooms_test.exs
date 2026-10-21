@@ -165,6 +165,8 @@ defmodule HoloChat.RoomsTest do
       # The first poster in a new room becomes its game master.
       chat_channel = Enum.find(channels, &(&1.name == chat))
       assert %{topic: nil, scenario_title: nil, game_masters: [_]} = chat_channel
+      # Like before it had a record, it is open to any language.
+      assert %{language: nil} = chat_channel
     end
   end
 
@@ -308,7 +310,7 @@ defmodule HoloChat.RoomsTest do
       chat_room = unique_room()
       message_fixture(user_scope_fixture(), chat_room)
 
-      assert {:ok, %Room{name: ^chat_room, scenario_id: nil} = room} =
+      assert {:ok, %Room{name: ^chat_room, scenario_id: nil, language: nil} = room} =
                Rooms.appoint_game_master(admin, chat_room, user.id)
 
       assert Rooms.game_master?(user_scope_fixture(user), room)

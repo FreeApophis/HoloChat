@@ -131,8 +131,9 @@ defmodule HoloChat.Rooms do
 
   @doc """
   The languages a room can speak, as `{code, name}`, English first: the
-  default for new records. The lobby and record-less rooms are open to any
-  language (the assistant's own words there are English).
+  default for role-play rooms. The lobby and chat rooms start without one:
+  they are open to any language (the assistant's own words there are
+  English).
   """
   def languages, do: @languages
 
@@ -500,7 +501,7 @@ defmodule HoloChat.Rooms do
 
   defp record_used_room(name) do
     if Chat.room_used?(name) do
-      Repo.insert!(%Room{name: name, kind: "chat"}, on_conflict: :nothing)
+      Repo.insert!(%Room{name: name, kind: "chat", language: nil}, on_conflict: :nothing)
       get_room(name)
     else
       {:error, :not_found}
@@ -710,7 +711,7 @@ defmodule HoloChat.Rooms do
   # posts at once, the one that inserts the record wins.
   defp claim_room(user, name) do
     Repo.transact(fn ->
-      case Repo.insert(%Room{name: name, kind: "chat"}, on_conflict: :nothing) do
+      case Repo.insert(%Room{name: name, kind: "chat", language: nil}, on_conflict: :nothing) do
         {:ok, %Room{id: nil}} ->
           {:ok, nil}
 
