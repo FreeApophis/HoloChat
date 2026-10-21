@@ -20,9 +20,11 @@ defmodule HoloChat.Assistant do
   import Ecto.Query, warn: false
 
   alias HoloChat.Accounts
+  alias HoloChat.Accounts.{Scope, User}
   alias HoloChat.Assistant.{LLM, Persona, Settings}
   alias HoloChat.Avatars
   alias HoloChat.Chat
+  alias HoloChat.Chat.Message
   alias HoloChat.Repo
 
   @pubsub HoloChat.PubSub
@@ -31,8 +33,8 @@ defmodule HoloChat.Assistant do
 
   @doc """
   Subscribes to assistant events: `{:assistant_settings_changed, %Settings{}}`,
-  `{:assistant_personas_changed}` and `{:assistant_status, status}` (see
-  `HoloChat.Assistant.Server`).
+  `{:assistant_personas_changed}`, `{:regenerate_reply, %Message{}}` and
+  `{:assistant_status, status}` (see `HoloChat.Assistant.Server`).
   """
   def subscribe, do: Phoenix.PubSub.subscribe(@pubsub, @topic)
 
@@ -191,6 +193,37 @@ defmodule HoloChat.Assistant do
       system_tokens + persona.context_messages * @max_message_tokens + persona.max_tokens
 
     worst_case <= context_length
+  end
+
+  @doc """
+  Asks the assistant to write the reply with id `id` again: the room's
+  latest message, if a persona or cast character wrote it. Any signed-in
+  user may ask. `HoloChat.Assistant.Server` replaces the text in place (see
+  `HoloChat.Chat.update_reply/2`).
+  """
+  def regenerate_reply(%Scope{user: %User{}}, id) do
+    with %Message{} = reply <- Chat.get_message(id) || {:error, :not_found},
+         :ok <- check_reply(reply),
+         :ok <- check_latest(reply),
+         %Settings{enabled: true} <- get_settings() do
+      broadcast({:regenerate_reply, reply})
+    else
+      %Settings{enabled: false} -> {:error, :disabled}
+      error -> error
+    end
+  end
+
+  def regenerate_reply(_scope, _id), do: {:error, :unauthorized}
+
+  defp check_reply(%Message{from_assistant: true, persona_id: id}) when is_integer(id), do: :ok
+  defp check_reply(%Message{from_assistant: true, character_id: id}) when is_integer(id), do: :ok
+  defp check_reply(_message), do: {:error, :not_a_reply}
+
+  defp check_latest(%Message{id: id, room: room}) do
+    case Chat.list_recent_messages(room, 1) do
+      [%Message{id: ^id}] -> :ok
+      _later_messages -> {:error, :not_latest}
+    end
   end
 
   @doc """

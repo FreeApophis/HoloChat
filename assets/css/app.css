@@ -157,3 +157,95 @@
   padding: 0.25em 0.5em;
 }
 .markdown th { font-weight: 600; }
+
+/* Regenerating replies: the text shimmers while stars twinkle around it,
+   then the new text is revealed with a sweep of light. CSS only. */
+@keyframes sparkle-shimmer { to { background-position: -200% 0; } }
+@keyframes sparkle-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1) rotate(90deg); }
+}
+@keyframes sparkle-reveal {
+  from { opacity: 0; filter: blur(4px); clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; filter: blur(0); clip-path: inset(0 0 0 0); }
+}
+@keyframes sparkle-sweep {
+  from { transform: translateX(-100%); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+@keyframes sparkle-burst {
+  0% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+  40% { opacity: 1; transform: scale(1.2) rotate(120deg); }
+  100% { opacity: 0; transform: scale(0.6) rotate(200deg); }
+}
+
+.sparkle-regenerating, .sparkle-reveal { position: relative; }
+
+.sparkle-regenerating [data-role="message-body"],
+.sparkle-regenerating [data-role="message-body"] * {
+  color: transparent;
+  background-image: linear-gradient(90deg, #8b5cf6, #ec4899, #f59e0b, #8b5cf6);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: sparkle-shimmer 1.8s linear infinite;
+}
+
+/* A handful of stars from two glyphs: text-shadow copies each one. */
+.sparkle-regenerating::before, .sparkle-regenerating::after,
+.sparkle-reveal::before {
+  content: "✦";
+  position: absolute;
+  pointer-events: none;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.sparkle-regenerating::before {
+  top: 0.1rem;
+  right: -0.6rem;
+  color: #f59e0b;
+  text-shadow: -3.5rem 1.6rem 0 #ec4899, -9rem 0.4rem 0 #8b5cf6, -14rem 2rem 0 #f59e0b;
+  animation: sparkle-twinkle 1.4s ease-in-out infinite;
+}
+.sparkle-regenerating::after {
+  bottom: -0.3rem;
+  left: 1.5rem;
+  color: #8b5cf6;
+  text-shadow: 5rem -1.8rem 0 #f59e0b, 11rem -0.6rem 0 #ec4899, 16rem -2.2rem 0 #8b5cf6;
+  animation: sparkle-twinkle 1.4s ease-in-out 0.7s infinite;
+}
+
+.sparkle-reveal [data-role="message-body"] {
+  animation: sparkle-reveal 0.9s ease-out both;
+}
+.sparkle-reveal::before {
+  top: 0;
+  right: -0.4rem;
+  color: #f59e0b;
+  text-shadow: -4rem 1.4rem 0 #ec4899, -10rem 0.2rem 0 #8b5cf6;
+  animation: sparkle-burst 0.9s ease-out both;
+}
+.sparkle-reveal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgb(245 158 11 / 0.35) 50%, transparent 70%);
+  animation: sparkle-sweep 0.9s ease-out both;
+}
+
+.sparkle-button { transition: transform 0.2s, opacity 0.2s, filter 0.2s; }
+.sparkle-button:hover {
+  transform: rotate(-12deg) scale(1.2);
+  filter: drop-shadow(0 0 4px #f59e0b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkle-regenerating [data-role="message-body"],
+  .sparkle-regenerating [data-role="message-body"] *,
+  .sparkle-regenerating::before, .sparkle-regenerating::after,
+  .sparkle-reveal [data-role="message-body"], .sparkle-reveal::before, .sparkle-reveal::after {
+    animation: none;
+  }
+  .sparkle-reveal::before, .sparkle-reveal::after { opacity: 0; }
+}

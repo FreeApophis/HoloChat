@@ -3,11 +3,14 @@ defmodule HoloChat.AssistantTest do
 
   import Mox
   import HoloChat.AccountsFixtures
+  import HoloChat.CharactersFixtures
+  import HoloChat.ChatFixtures, only: [unique_room: 0]
 
   alias HoloChat.Accounts
   alias HoloChat.Assistant
   alias HoloChat.Assistant.{LLMMock, Persona, Settings}
   alias HoloChat.Characters.Character
+  alias HoloChat.Chat
   alias HoloChat.Chat.Message
 
   setup :verify_on_exit!
@@ -283,6 +286,47 @@ defmodule HoloChat.AssistantTest do
                %{role: "user", content: "*Riker nods*"},
                %{role: "user", content: "Data: Hm."}
              ] = Assistant.build_prompt(persona, history, %{7 => riker})
+    end
+  end
+
+  describe "regenerate_reply/2" do
+    setup %{admin: admin} do
+      {:ok, _} = Assistant.update_settings(admin, %{"enabled" => "true"})
+      room = unique_room()
+      {:ok, holo} = Assistant.create_persona(admin, %{"name" => "Holo", "rooms" => [room]})
+      luna = character_fixture(admin, %{"name" => "Luna"})
+      Assistant.subscribe()
+      %{room: room, holo: holo, luna: luna}
+    end
+
+    test "asks the assistant to rewrite the room's latest reply",
+         %{member: member, room: room, holo: holo} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.", persona_id: holo.id)
+
+      assert :ok = Assistant.regenerate_reply(member, reply.id)
+      assert_receive {:regenerate_reply, %Message{id: id}}
+      assert id == reply.id
+    end
+
+    test "refuses guests, older replies, people's messages and unknown ids",
+         %{member: member, room: room, holo: holo, luna: luna} do
+      {:ok, older} = Chat.create_character_message(room, "Luna", "Hm.", luna.id)
+      {:ok, _latest} = Chat.create_assistant_message(room, "Holo", "Hi.", persona_id: holo.id)
+      {:ok, people} = Chat.create_message(member, unique_room(), %{"body" => "Me."})
+
+      assert {:error, :unauthorized} = Assistant.regenerate_reply(nil, older.id)
+      assert {:error, :not_latest} = Assistant.regenerate_reply(member, older.id)
+      assert {:error, :not_a_reply} = Assistant.regenerate_reply(member, people.id)
+      assert {:error, :not_found} = Assistant.regenerate_reply(member, "-1")
+      refute_receive {:regenerate_reply, _}
+    end
+
+    test "refuses while the assistant is off",
+         %{admin: admin, member: member, room: room, holo: holo} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.", persona_id: holo.id)
+      {:ok, _} = Assistant.update_settings(admin, %{"enabled" => "false"})
+
+      assert {:error, :disabled} = Assistant.regenerate_reply(member, reply.id)
     end
   end
 

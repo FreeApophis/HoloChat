@@ -11,7 +11,10 @@ defmodule HoloChat.Assistant.Server do
       `HoloChat.Assistant.Director`: once players have been quiet for the
       scene's reply delay, the characters they named (or, with natural
       turns, one at random) answer; a character naming another lets that
-      one answer next, up to the scene's limit of AI turns in a row.
+      one answer next, up to the scene's limit of AI turns in a row, and
+    * requests to write a room's latest reply again
+      (`HoloChat.Assistant.regenerate_reply/2`): the new text replaces the
+      old one in place and is no new turn.
 
   Personas and characters share one queue. Up to the settings'
   `parallel_replies` generate at once (as many as the model server runs in
@@ -88,6 +91,15 @@ defmodule HoloChat.Assistant.Server do
 
   def handle_info({:assistant_personas_changed}, state) do
     {:noreply, state |> load_personas() |> subscribe_rooms() |> announce()}
+  end
+
+  # Deleted and rewritten messages take no turn.
+  def handle_info({event, _message}, state)
+      when event in [:message_deleted, :message_regenerating, :message_updated],
+      do: {:noreply, state}
+
+  def handle_info({:regenerate_reply, reply}, state) do
+    {:noreply, state |> enqueue_regeneration(reply) |> maybe_start_next()}
   end
 
   def handle_info(:assistant_status_request, state) do
@@ -235,6 +247,23 @@ defmodule HoloChat.Assistant.Server do
 
   defp put_scene(state, scene), do: put_in(state.scenes[scene.room.name], scene)
 
+  ## Regeneration
+
+  defp enqueue_regeneration(%{settings: %{enabled: false}} = state, _reply), do: state
+
+  defp enqueue_regeneration(state, reply) do
+    job = {:regenerate, reply}
+    regenerating? = job in Map.values(state.tasks)
+    queued = enqueue(state, job)
+
+    if regenerating? or queued == state do
+      state
+    else
+      Chat.announce_regenerating(reply)
+      queued
+    end
+  end
+
   ## The shared queue
 
   defp enqueue(state, job) do
@@ -277,13 +306,42 @@ defmodule HoloChat.Assistant.Server do
 
   defp job_room({:persona, _persona, message}), do: message.room
   defp job_room({:character, room_name, _character}), do: room_name
+  defp job_room({:regenerate, reply}), do: reply.room
 
   # Context: the messages before the mention, plus the mention itself.
   defp generate(endpoint_url, {:persona, persona, message}) do
     {history, _more?} =
       Chat.list_messages_page(message.room, message, persona.context_messages - 1)
 
-    history = history ++ [message]
+    persona_reply(endpoint_url, persona, history ++ [message])
+  end
+
+  # The scene, cast and history are read when the turn starts, so the
+  # character sees everything said while it waited in the queue. A player
+  # may have put the character on meanwhile; then it is no longer the AI's.
+  defp generate(endpoint_url, {:character, room_name, character}) do
+    history = Chat.list_recent_messages(room_name, @scene_history)
+    character_reply(endpoint_url, room_name, character, history)
+  end
+
+  # A reply is written again from what was said before it.
+  defp generate(endpoint_url, {:regenerate, %{persona_id: id} = reply}) when is_integer(id) do
+    case Assistant.get_persona(id) do
+      nil ->
+        {:error, :no_persona}
+
+      persona ->
+        {history, _more?} = Chat.list_messages_page(reply.room, reply, persona.context_messages)
+        persona_reply(endpoint_url, persona, history)
+    end
+  end
+
+  defp generate(endpoint_url, {:regenerate, %{character_id: id} = reply}) do
+    {history, _more?} = Chat.list_messages_page(reply.room, reply, @scene_history)
+    character_reply(endpoint_url, reply.room, %{id: id}, history)
+  end
+
+  defp persona_reply(endpoint_url, persona, history) do
     prompt = Assistant.build_prompt(persona, history, worn_characters(history))
 
     with {:ok, text} <-
@@ -298,14 +356,10 @@ defmodule HoloChat.Assistant.Server do
     end
   end
 
-  # The scene, cast and history are read when the turn starts, so the
-  # character sees everything said while it waited in the queue. A player
-  # may have put the character on meanwhile; then it is no longer the AI's.
-  defp generate(endpoint_url, {:character, room_name, character}) do
+  defp character_reply(endpoint_url, room_name, character, history) do
     with %{} = room <- Rooms.get_room(room_name) || {:error, :no_scene},
          cast = Rooms.list_ai_cast(room),
          %{} = character <- Enum.find(cast, &(&1.id == character.id)) || {:error, :not_cast},
-         history = Chat.list_recent_messages(room_name, @scene_history),
          worn = worn_characters(history),
          prompt = ScenePrompt.build(room, character, cast, history, worn),
          {:ok, text} <-
@@ -355,6 +409,14 @@ defmodule HoloChat.Assistant.Server do
     Logger.warning("#{character.name} could not answer in #{room_name}: #{inspect(reason)}")
   end
 
+  defp post_reply({:ok, text}, {:regenerate, reply}), do: Chat.update_reply(reply, text)
+
+  # The old text is announced again, so clients stop waiting for a new one.
+  defp post_reply({:error, reason}, {:regenerate, reply}) do
+    Logger.warning("#{reply.username} could not regenerate a reply: #{inspect(reason)}")
+    Chat.update_reply(reply, reply.body)
+  end
+
   ## Status
 
   # Announces every room/speaker pair that is online, and takes pairs that
@@ -367,6 +429,7 @@ defmodule HoloChat.Assistant.Server do
       MapSet.new(Map.values(state.tasks), fn
         {:persona, persona, message} -> {message.room, persona.name}
         {:character, room_name, character} -> {room_name, character.name}
+        {:regenerate, reply} -> {reply.room, reply.username}
       end)
 
     for {{room, _name} = pair, speaker} <- online do

@@ -66,6 +66,19 @@ defmodule HoloChat.Assistant.ServerTest do
     assert_receive {:new_message, %{from_assistant: true, body: "Hello, Riker."}}, 1000
   end
 
+  test "survives other events in its rooms", %{admin: admin, member: member, room: room} do
+    enable(admin)
+    server = start_server()
+    ref = Process.monitor(server)
+
+    message = message_fixture(member, room, %{"body" => "Oops."})
+    {:ok, _} = Chat.delete_message(message)
+    assert_receive {:message_deleted, _}
+    _ = :sys.get_state(server)
+
+    refute_received {:DOWN, ^ref, :process, _pid, _reason}
+  end
+
   test "ignores messages that don't mention a persona",
        %{admin: admin, member: member, room: room} do
     enable(admin)

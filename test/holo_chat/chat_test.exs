@@ -390,4 +390,45 @@ defmodule HoloChat.ChatTest do
       assert Chat.get_message("nope") == nil
     end
   end
+
+  describe "regenerating replies" do
+    test "announce_regenerating/1 tells the room a reply is being rewritten", %{room: room} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.")
+      Chat.subscribe(room)
+
+      :ok = Chat.announce_regenerating(reply)
+
+      assert_receive {:message_regenerating, %Message{id: id}}
+      assert id == reply.id
+    end
+
+    test "update_reply/2 replaces the text in place and announces it", %{room: room} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.")
+      Chat.subscribe(room)
+
+      assert {:ok, %Message{body: "Hello there!"} = updated} =
+               Chat.update_reply(reply, "Hello there!")
+
+      assert updated.id == reply.id
+      assert updated.inserted_at == reply.inserted_at
+      assert_receive {:message_updated, %Message{body: "Hello there!"}}
+      assert [%{body: "Hello there!"}] = Chat.list_recent_messages(room)
+    end
+
+    test "update_reply/2 fails for a reply deleted meanwhile", %{room: room} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.")
+      {:ok, _} = Chat.delete_message(reply)
+      Chat.subscribe(room)
+
+      assert {:error, _changeset} = Chat.update_reply(reply, "Hello there!")
+      refute_receive {:message_updated, _}
+    end
+
+    test "update_reply/2 shortens replies that are too long", %{room: room} do
+      {:ok, reply} = Chat.create_assistant_message(room, "Holo", "Hi.")
+
+      assert {:ok, %{body: body}} = Chat.update_reply(reply, String.duplicate("a", 5000))
+      assert String.length(body) < 5000
+    end
+  end
 end

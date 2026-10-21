@@ -78,6 +78,33 @@ defmodule HoloChatWeb.SceneRepliesTest do
     assert has_element?(view, "#profile-card", "Dreamy Ravenclaw.")
   end
 
+  test "a character's latest reply can be regenerated", %{gm: gm, room: room} do
+    neville = character_fixture(gm, %{"name" => "Neville Longbottom"})
+    {:ok, _} = Rooms.cast_character(gm, room, neville.id)
+    start_server()
+    {_player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, _messages, _opts -> {:ok, "*stares at the ceiling*"} end)
+    view |> form("#message-form", message: %{body: "Hello, Luna."}) |> render_submit()
+    assert_receive {:new_message, %{username: "Luna Lovegood"} = reply}, 1000
+
+    # The new reply still sees the scene, but not the reply it replaces. It
+    # names Neville, yet nobody answers: a rewrite is no new turn.
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      assert hd(messages).content =~ "You are playing Luna Lovegood"
+      assert List.last(messages).content =~ "Hello, Luna."
+      refute Enum.any?(messages, &(&1.content =~ "ceiling"))
+      {:ok, "Hello! Neville, look, a Wrackspurt."}
+    end)
+
+    view |> element("#regenerate-message-#{reply.id}") |> render_click()
+
+    assert_receive {:message_updated, %{id: id, body: "Hello! Neville" <> _}}, 1000
+    assert id == reply.id
+    assert has_element?(view, "#messages-#{reply.id}", "a Wrackspurt")
+    refute_receive {:new_message, %{from_assistant: true}}, 300
+  end
+
   test "the character named in a message answers", %{gm: gm, room: room} do
     neville = character_fixture(gm, %{"name" => "Neville Longbottom"})
     {:ok, _} = Rooms.cast_character(gm, room, neville.id)

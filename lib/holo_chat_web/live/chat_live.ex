@@ -480,6 +480,7 @@ defmodule HoloChatWeb.ChatLive do
                 :for={{id, message} <- @streams.messages}
                 id={id}
                 data-mentions-me={mentions_me?(message, @current_scope, @cloak)}
+                class="group/item"
               >
                 <.scenario_intro
                   :if={message.kind == "scenario"}
@@ -528,7 +529,14 @@ defmodule HoloChatWeb.ChatLive do
                     />
                   </button>
 
-                  <div class="min-w-0">
+                  <div
+                    data-regenerating={message.id in @regenerating}
+                    class={[
+                      "min-w-0",
+                      message.id in @regenerating && "sparkle-regenerating",
+                      message.id in @regenerated && "sparkle-reveal"
+                    ]}
+                  >
                     <div class="flex items-baseline gap-2">
                       <button
                         type="button"
@@ -570,6 +578,23 @@ defmodule HoloChatWeb.ChatLive do
                       >
                         {Calendar.strftime(message.inserted_at, "%H:%M")}
                       </time>
+
+                      <%!-- Only the room's latest message can be written again. --%>
+                      <button
+                        :if={
+                          (ai_reply?(message) and @current_scope) && @current_scope.user &&
+                            message.id not in @regenerating
+                        }
+                        id={"regenerate-message-#{message.id}"}
+                        type="button"
+                        phx-click="regenerate_message"
+                        phx-value-id={message.id}
+                        aria-label="Regenerate reply"
+                        title="Regenerate reply"
+                        class="sparkle-button hidden self-center rounded p-0.5 text-violet-500 opacity-60 group-last/item:inline-flex hover:opacity-100 focus:opacity-100"
+                      >
+                        <.icon name="hero-sparkles" class="size-3.5" />
+                      </button>
 
                       <button
                         :if={@can_moderate?}
@@ -1104,7 +1129,9 @@ defmodule HoloChatWeb.ChatLive do
        cast: [],
        can_manage_scene?: false,
        can_moderate?: false,
-       show_scenario?: false
+       show_scenario?: false,
+       regenerating: MapSet.new(),
+       regenerated: MapSet.new()
      )
      |> assign(:scenarios, %{})
      |> assign(cloak: nil, wardrobe_results: [])
@@ -1179,6 +1206,8 @@ defmodule HoloChatWeb.ChatLive do
     |> assign(:cloak, cloak)
     |> assign_scene(Rooms.get_room(room))
     |> assign(:can_moderate?, Rooms.can_moderate?(socket.assigns.current_scope, room))
+    # Ids of replies being written again, and of those just rewritten.
+    |> assign(regenerating: MapSet.new(), regenerated: MapSet.new())
     |> assign(:topic, Rooms.get_topic(room))
     |> assign(:editing_topic?, false)
     |> assign(:show_scenario?, false)
@@ -1267,6 +1296,17 @@ defmodule HoloChatWeb.ChatLive do
         else: update(socket, :mentions, &Map.delete(&1, socket.assigns.room))
 
     {:noreply, socket |> assign(:page_hidden?, hidden?) |> assign_title()}
+  end
+
+  def handle_event("regenerate_message", %{"id" => id}, socket) do
+    # The new text arrives for everyone through {:message_updated, ...}.
+    case Assistant.regenerate_reply(socket.assigns.current_scope, id) do
+      :ok ->
+        {:noreply, socket}
+
+      {:error, _reason} ->
+        {:noreply, put_flash(socket, :error, "You can't regenerate that reply.")}
+    end
   end
 
   def handle_event("delete_message", %{"id" => id}, socket) do
@@ -1416,6 +1456,29 @@ defmodule HoloChatWeb.ChatLive do
 
   def handle_info({:message_deleted, _message}, socket), do: {:noreply, socket}
 
+  def handle_info(
+        {:message_regenerating, %{room: room} = message},
+        %{assigns: %{room: room}} = socket
+      ) do
+    {:noreply,
+     socket
+     |> update(:regenerating, &MapSet.put(&1, message.id))
+     |> update(:regenerated, &MapSet.delete(&1, message.id))
+     |> stream_insert(:messages, message)}
+  end
+
+  def handle_info({:message_regenerating, _message}, socket), do: {:noreply, socket}
+
+  def handle_info({:message_updated, %{room: room} = message}, %{assigns: %{room: room}} = socket) do
+    {:noreply,
+     socket
+     |> update(:regenerating, &MapSet.delete(&1, message.id))
+     |> update(:regenerated, &MapSet.put(&1, message.id))
+     |> stream_insert(:messages, message)}
+  end
+
+  def handle_info({:message_updated, _message}, socket), do: {:noreply, socket}
+
   def handle_info({:room_updated, %{name: room} = scene}, %{assigns: %{room: room}} = socket) do
     roleplay_rooms =
       if scene.scenario_id,
@@ -1497,9 +1560,10 @@ defmodule HoloChatWeb.ChatLive do
 
   def handle_info({:assistant_personas_changed}, socket), do: {:noreply, assign_personas(socket)}
 
-  # Other assistant events (status, settings) are handled through presence.
+  # Other assistant events (status, settings) are handled through presence;
+  # regeneration requests are for the server, which then updates the room.
   def handle_info({event, _payload}, socket)
-      when event in [:assistant_status, :assistant_settings_changed],
+      when event in [:assistant_status, :assistant_settings_changed, :regenerate_reply],
       do: {:noreply, socket}
 
   def handle_info(:assistant_status_request, socket), do: {:noreply, socket}
@@ -1719,6 +1783,10 @@ defmodule HoloChatWeb.ChatLive do
 
   # Who wrote a message, as shown now: people by their current profile,
   # personas by their current avatar, characters by their current sheet.
+  defp ai_reply?(%{from_assistant: true, persona_id: id}) when is_integer(id), do: true
+  defp ai_reply?(%{from_assistant: true, character_id: id}) when is_integer(id), do: true
+  defp ai_reply?(_message), do: false
+
   # Legacy messages and deleted characters have no profile.
   # A player in a cloak: the character, played by the player (`actor`).
   defp author(

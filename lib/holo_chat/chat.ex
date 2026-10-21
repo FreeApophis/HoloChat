@@ -309,6 +309,29 @@ defmodule HoloChat.Chat do
   end
 
   @doc """
+  Tells the reply's room that it is being rewritten, with
+  `{:message_regenerating, %Message{}}`.
+  """
+  def announce_regenerating(%Message{} = reply) do
+    Phoenix.PubSub.broadcast(@pubsub, topic(reply.room), {:message_regenerating, reply})
+  end
+
+  @doc """
+  Replaces the text of an AI reply in place (shortened like new replies)
+  and announces it in its room with `{:message_updated, %Message{}}`.
+  Fails with a changeset if the reply was deleted meanwhile.
+  """
+  def update_reply(%Message{from_assistant: true} = reply, body) do
+    with {:ok, reply} <-
+           reply
+           |> Message.changeset(%{body: truncate(body, @max_body_length)})
+           |> Repo.update(stale_error_field: :id) do
+      Phoenix.PubSub.broadcast(@pubsub, topic(reply.room), {:message_updated, reply})
+      {:ok, reply}
+    end
+  end
+
+  @doc """
   Gets a message by id, or nil.
   """
   def get_message(id) do
