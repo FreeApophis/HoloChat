@@ -181,7 +181,17 @@ defmodule HoloChatWeb.AdminLive.Assistant do
             <li id="prompt-template-standard" class="flex items-center gap-3 px-3 py-2 text-sm">
               <.icon name="hero-document-text" class="size-4 opacity-60" />
               <span class="font-semibold">Standard</span>
-              <span class="min-w-0 flex-1 truncate opacity-70">built in, used unless a scene picks another</span>
+              <span class="min-w-0 flex-1 truncate opacity-70">
+                built in, used unless a scene picks another
+              </span>
+              <.link
+                id="view-prompt-template-standard"
+                navigate={~p"/admin/assistant/templates/standard"}
+                class="rounded-lg p-1.5 transition hover:bg-base-200"
+                aria-label="View the Standard template"
+              >
+                <.icon name="hero-eye" class="size-4" />
+              </.link>
             </li>
             <li
               :for={template <- @prompt_templates}

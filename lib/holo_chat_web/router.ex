@@ -85,6 +85,7 @@ defmodule HoloChatWeb.Router do
       live "/assistant/personas/new", AdminLive.PersonaForm, :new
       live "/assistant/personas/:id/edit", AdminLive.PersonaForm, :edit
       live "/assistant/templates/new", AdminLive.PromptTemplateForm, :new
+      live "/assistant/templates/standard", AdminLive.PromptTemplateForm, :standard
       live "/assistant/templates/:id/edit", AdminLive.PromptTemplateForm, :edit
     end
   end

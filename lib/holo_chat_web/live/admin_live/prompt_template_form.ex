@@ -28,45 +28,85 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateForm do
           </:subtitle>
         </.header>
 
-        <.form
-          for={@form}
-          id="prompt-template-form"
-          phx-change="validate"
-          phx-submit="save"
-          class="space-y-1"
-        >
-          <.input field={@form[:name]} type="text" label="Name (shown to game masters)" />
-          <.input
-            field={@form[:body]}
-            type="textarea"
-            label="System prompt for cast characters"
-            rows="18"
-            class="w-full textarea font-mono text-xs leading-relaxed"
-          />
-
-          <div id="placeholder-help" class="mb-4 rounded-xl bg-base-200/60 p-3 text-xs">
-            <p class="mb-2 font-medium">Placeholders</p>
-            <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <%= for {placeholder, meaning} <- @placeholders do %>
-                <dt class="font-mono">{placeholder}</dt>
-                <dd class="opacity-70">{meaning}</dd>
-              <% end %>
-            </dl>
-            <p class="mt-2 opacity-70">
-              A line whose placeholders are all empty is left out, and so is a paragraph
-              that loses all such lines, so a "Personality:" label disappears with an
-              empty personality. The chat itself follows as messages.
+        <%= if @live_action == :standard do %>
+          <div class="space-y-2">
+            <p class="text-sm opacity-70">
+              Used by every scene that picks no other template. It can't be changed, but a new
+              template can start from it.
             </p>
+            <pre
+              id="standard-template-body"
+              class="max-h-[32rem] overflow-y-auto rounded-xl border border-base-300 bg-base-200/40 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap"
+              phx-no-format
+            >{@standard}</pre>
           </div>
 
-          <.button variant="primary" phx-disable-with="Saving…">Save template</.button>
-        </.form>
+          <.placeholder_help placeholders={@placeholders} />
+
+          <.link
+            id="copy-standard-template"
+            navigate={~p"/admin/assistant/templates/new"}
+            class="btn btn-primary"
+          >
+            <.icon name="hero-document-duplicate" class="size-4" /> New template from this one
+          </.link>
+        <% else %>
+          <.form
+            for={@form}
+            id="prompt-template-form"
+            phx-change="validate"
+            phx-submit="save"
+            class="space-y-1"
+          >
+            <.input field={@form[:name]} type="text" label="Name (shown to game masters)" />
+            <.input
+              field={@form[:body]}
+              type="textarea"
+              label="System prompt for cast characters"
+              rows="18"
+              class="w-full textarea font-mono text-xs leading-relaxed"
+            />
+
+            <.placeholder_help placeholders={@placeholders} />
+
+            <.button variant="primary" phx-disable-with="Saving…">Save template</.button>
+          </.form>
+        <% end %>
       </div>
     </Layouts.app>
     """
   end
 
+  attr :placeholders, :list, required: true
+
+  defp placeholder_help(assigns) do
+    ~H"""
+    <div id="placeholder-help" class="mb-4 rounded-xl bg-base-200/60 p-3 text-xs">
+      <p class="mb-2 font-medium">Placeholders</p>
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <%= for {placeholder, meaning} <- @placeholders do %>
+          <dt class="font-mono">{placeholder}</dt>
+          <dd class="opacity-70">{meaning}</dd>
+        <% end %>
+      </dl>
+      <p class="mt-2 opacity-70">
+        A line whose placeholders are all empty is left out, and so is a paragraph
+        that loses all such lines, so a "Personality:" label disappears with an
+        empty personality. The chat itself follows as messages.
+      </p>
+    </div>
+    """
+  end
+
   @impl true
+  def mount(_params, _session, %{assigns: %{live_action: :standard}} = socket) do
+    {:ok,
+     socket
+     |> assign(:page_title, "Standard template")
+     |> assign(:placeholders, @placeholders)
+     |> assign(:standard, Assistant.default_prompt_template())}
+  end
+
   def mount(params, _session, socket) do
     {template, attrs} =
       case socket.assigns.live_action do

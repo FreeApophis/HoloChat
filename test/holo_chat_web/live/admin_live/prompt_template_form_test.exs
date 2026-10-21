@@ -43,6 +43,25 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateFormTest do
       assert has_element?(overview, "#prompt-template-#{template.id}", name)
     end
 
+    test "shows the built-in template read-only", %{conn: conn} do
+      {:ok, overview, _html} = live(conn, ~p"/admin/assistant")
+
+      {:ok, view, _html} =
+        overview
+        |> element("#view-prompt-template-standard")
+        |> render_click()
+        |> follow_redirect(conn)
+
+      assert has_element?(view, "#standard-template-body", "You are playing {{char}}")
+      assert has_element?(view, "#placeholder-help", "{{others}}")
+      refute has_element?(view, "#prompt-template-form")
+
+      {:ok, new_view, _html} =
+        view |> element("#copy-standard-template") |> render_click() |> follow_redirect(conn)
+
+      assert has_element?(new_view, "#prompt-template-form textarea", "You are playing {{char}}")
+    end
+
     test "edits and deletes a template", %{conn: conn, admin: admin} do
       {:ok, template} =
         Assistant.create_prompt_template(admin, %{
