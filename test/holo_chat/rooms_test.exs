@@ -775,6 +775,18 @@ defmodule HoloChat.RoomsTest do
       assert %{cloak_policy: [_]} = errors_on(changeset)
     end
 
+    test "game masters choose the room's language", %{gm: gm, room: room} do
+      assert room.language == "en"
+      assert {"de", "Deutsch"} in Rooms.languages()
+
+      {:ok, room} = Rooms.update_room(gm, room, %{"language" => "de"})
+      assert room.language == "de"
+      assert %{language: "de"} = Enum.find(Rooms.list_channels(), &(&1.name == room.name))
+
+      assert {:error, changeset} = Rooms.update_room(gm, room, %{"language" => "xx"})
+      assert %{language: [_]} = errors_on(changeset)
+    end
+
     test "game masters choose a prompt template for the cast", %{gm: gm, room: room} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
 

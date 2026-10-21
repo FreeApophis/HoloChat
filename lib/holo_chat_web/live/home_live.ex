@@ -174,8 +174,9 @@ defmodule HoloChatWeb.HomeLive do
                   <% end %>
                 </p>
                 <div class="absolute inset-x-0 bottom-0 p-5 text-white">
-                  <p class="text-xs font-semibold tracking-wide uppercase opacity-80">
-                    #{room.name}
+                  <p class="flex items-center gap-1.5 text-xs font-semibold tracking-wide">
+                    <span class="uppercase opacity-80">#{room.name}</span>
+                    <.language_badge language={room.language} on_dark />
                   </p>
                   <h3 class="mt-1 text-xl font-semibold tracking-tight">
                     <.link navigate={~p"/rooms/#{room.name}"} class="after:absolute after:inset-0">

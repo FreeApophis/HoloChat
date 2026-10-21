@@ -179,6 +179,20 @@ defmodule HoloChatWeb.RoleplayLiveTest do
              )
     end
 
+    test "let game masters choose the room's language", %{conn: conn, room: room} do
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+      assert has_element?(view, "#scene-form select[name='room[language]'] option", "Deutsch")
+
+      {:ok, room_view, _html} =
+        view
+        |> form("#scene-form", room: %{language: "de"})
+        |> render_submit()
+        |> follow_redirect(conn)
+
+      assert Rooms.get_room(room.name).language == "de"
+      assert has_element?(room_view, "#room-language", "DE")
+    end
+
     test "let game masters choose the cast's prompt template", %{conn: conn, room: room} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
       name = "Rhymes #{System.unique_integer([:positive])}"

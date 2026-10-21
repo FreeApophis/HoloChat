@@ -12,6 +12,8 @@ defmodule HoloChat.Rooms.Room do
     field :max_ai_turns, :integer, default: 2
     # When a player wears a character the AI plays here: "takeover" or "forbid".
     field :cloak_policy, :string, default: "takeover"
+    # The language spoken here, which the AI follows; see Rooms.languages/0.
+    field :language, :string, default: "en"
     # The assistant's prompt template for the cast; nil for the built-in one.
     # A plain id: Rooms doesn't depend on Assistant.
     field :prompt_template_id, :id
@@ -36,9 +38,9 @@ defmodule HoloChat.Rooms.Room do
   end
 
   @doc """
-  Changeset for the settings the game masters edit: how the cast takes turns,
-  whether players may wear the cast's characters, and the cast's prompt
-  template.
+  Changeset for the settings the game masters edit: the room's language, how
+  the cast takes turns, whether players may wear the cast's characters, and
+  the cast's prompt template.
   """
   def changeset(room, attrs) do
     room
@@ -47,8 +49,10 @@ defmodule HoloChat.Rooms.Room do
       :reply_delay,
       :max_ai_turns,
       :cloak_policy,
-      :prompt_template_id
+      :prompt_template_id,
+      :language
     ])
+    |> validate_inclusion(:language, Enum.map(HoloChat.Rooms.languages(), &elem(&1, 0)))
     |> validate_inclusion(:reply_policy, ~w(natural mention))
     |> validate_inclusion(:cloak_policy, ~w(takeover forbid))
     |> validate_number(:reply_delay, greater_than_or_equal_to: 0, less_than_or_equal_to: 60)

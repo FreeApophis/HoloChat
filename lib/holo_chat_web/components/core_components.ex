@@ -517,6 +517,40 @@ defmodule HoloChatWeb.CoreComponents do
     """
   end
 
+  @doc """
+  Shows the language a room speaks, as a small "DE"-style badge. English,
+  the default, shows nothing.
+  """
+  attr :language, :string, required: true
+  attr :id, :string, default: nil
+  attr :class, :any, default: nil
+  attr :on_dark, :boolean, default: false, doc: "for badges on images and dark overlays"
+
+  def language_badge(%{language: "en"} = assigns), do: ~H""
+
+  def language_badge(assigns) do
+    assigns =
+      assign(assigns, :name, Map.new(HoloChat.Rooms.languages())[assigns.language])
+
+    ~H"""
+    <span
+      id={@id}
+      data-role="language"
+      title={"Spoken here: #{@name}"}
+      class={[
+        "rounded px-1 text-[0.65rem] font-semibold tracking-wide",
+        if(@on_dark,
+          do: "bg-white/25 text-white backdrop-blur",
+          else: "bg-sky-500/15 text-sky-700 dark:text-sky-300"
+        ),
+        @class
+      ]}
+    >
+      {String.upcase(@language)}
+    </span>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

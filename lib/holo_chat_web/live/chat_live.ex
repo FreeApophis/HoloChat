@@ -314,6 +314,12 @@ defmodule HoloChatWeb.ChatLive do
             <div class="flex items-center gap-3">
               <h1 id="room-title" class="flex items-center gap-1 text-base font-semibold">
                 <.icon name="hero-hashtag" class="size-4 opacity-60" /> {@room}
+                <.language_badge
+                  :if={@scene}
+                  id="room-language"
+                  language={@scene.language}
+                  class="ml-1"
+                />
               </h1>
 
               <div

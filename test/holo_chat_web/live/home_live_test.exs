@@ -88,6 +88,7 @@ defmodule HoloChatWeb.HomeLiveTest do
       busy = roleplay_room_fixture(gm, %{"title" => "Risa"})
       quieter = roleplay_room_fixture(gm, %{"title" => "Eldermere"})
       idle = roleplay_room_fixture(gm, %{"title" => "Deep Station"})
+      {:ok, busy} = Rooms.update_room(gm, busy, %{"language" => "de"})
 
       for _ <- 1..3, do: say(user_scope_fixture(), busy.name)
       say(user_scope_fixture(), quieter.name)
@@ -101,6 +102,8 @@ defmodule HoloChatWeb.HomeLiveTest do
       assert has_element?(view, "#destination-#{busy.name}", "Risa")
       assert has_element?(view, "#destination-#{busy.name}", "3 players this week")
       assert has_element?(view, "#destination-#{quieter.name}", "Eldermere")
+      assert has_element?(view, "#destination-#{busy.name} [data-role='language']", "DE")
+      refute has_element?(view, "#destination-#{quieter.name} [data-role='language']")
       refute has_element?(view, "#destination-#{idle.name}")
       assert destination_ids(view) == ["destination-#{busy.name}", "destination-#{quieter.name}"]
 

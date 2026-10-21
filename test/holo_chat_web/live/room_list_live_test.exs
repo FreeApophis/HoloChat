@@ -7,12 +7,24 @@ defmodule HoloChatWeb.RoomListLiveTest do
   import HoloChat.RoomsFixtures
   import HoloChatWeb.PresenceHelpers
 
+  alias HoloChat.Rooms
   alias HoloChatWeb.Presence
 
   setup do
     Presence.subscribe_rooms()
     on_exit(&await_presence_fetchers/0)
     %{gm: user_scope_fixture()}
+  end
+
+  test "shows the language of rooms that don't speak English", %{conn: conn, gm: gm} do
+    german = roleplay_room_fixture(gm)
+    english = roleplay_room_fixture(gm)
+    {:ok, _} = Rooms.update_room(gm, german, %{"language" => "de"})
+
+    {:ok, view, _html} = live(conn, ~p"/rooms")
+
+    assert has_element?(view, "#channel-#{german.name} [data-role='language']", "DE")
+    refute has_element?(view, "#channel-#{english.name} [data-role='language']")
   end
 
   test "lists every room with its topic, game masters and people online", %{conn: conn, gm: gm} do
