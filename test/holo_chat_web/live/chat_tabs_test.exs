@@ -27,9 +27,8 @@ defmodule HoloChatWeb.ChatTabsTest do
     message_fixture(scope, to)
     {:ok, view, _html} = live(conn, ~p"/rooms/#{from}")
 
-    view |> element("#room-link-#{to}") |> render_click()
+    render_patch(view, ~p"/rooms/#{to}")
 
-    assert_patch(view, ~p"/rooms/#{to}")
     assert tab_ids(view) == ["room-tab-lobby", "room-tab-#{from}", "room-tab-#{to}"]
 
     view |> element("#room-tab-#{from} a") |> render_click()

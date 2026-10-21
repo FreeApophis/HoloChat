@@ -64,9 +64,10 @@ defmodule HoloChatWeb.ChatRoomsTest do
       message_fixture(scope, other, %{"body" => "while you were away"})
       assert has_element?(view, "#room-unread-#{other}")
 
-      view |> element("#room-link-#{other}") |> render_click()
+      # The room list holds the busiest rooms of all running tests, so the
+      # room may have dropped out of it already: go there directly.
+      render_patch(view, ~p"/rooms/#{other}")
 
-      assert_patch(view, ~p"/rooms/#{other}")
       refute has_element?(view, "#room-unread-#{other}")
       assert has_element?(view, @message_items, "while you were away")
     end
@@ -87,7 +88,7 @@ defmodule HoloChatWeb.ChatRoomsTest do
       message_fixture(scope, to, %{"body" => "already here"})
       {:ok, view, _html} = live(conn, ~p"/rooms/#{from}")
 
-      view |> element("#room-link-#{to}") |> render_click()
+      render_patch(view, ~p"/rooms/#{to}")
       assert has_element?(view, "#room-title", to)
       assert has_element?(view, @message_items, "already here")
 
@@ -104,7 +105,7 @@ defmodule HoloChatWeb.ChatRoomsTest do
       {:ok, mover, _html} = live(conn, ~p"/rooms/#{from}")
       {:ok, watcher, _html} = live(build_conn_with_unique_ip(), ~p"/rooms/#{unique_room()}")
 
-      mover |> element("#room-link-#{to}") |> render_click()
+      render_patch(mover, ~p"/rooms/#{to}")
       await_presence(%{room: to})
 
       assert has_element?(watcher, "#room-online-#{to}", "1")
