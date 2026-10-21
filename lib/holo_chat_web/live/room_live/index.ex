@@ -63,7 +63,7 @@ defmodule HoloChatWeb.RoomLive.Index do
                         if(channel.scenario_title, do: "text-violet-600", else: "opacity-50")
                       ]}
                     /> #{channel.name}
-                    <.language_badge :if={channel.language} language={channel.language} />
+                    <.language_badge language={channel.language} />
                   </.link>
                 </td>
                 <td data-role="topic" class="max-w-md px-4 py-3">

@@ -123,6 +123,31 @@ defmodule HoloChatWeb.SceneRepliesTest do
     assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
   end
 
+  test "a multilingual room's cast speaks with its English template", %{gm: gm, room: room} do
+    {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+    {:ok, template} =
+      Assistant.create_prompt_template(user_scope_fixture(admin), %{
+        "name" => "Rhymes #{System.unique_integer([:positive])}",
+        "body" => "{{char}} speaks in rhyme."
+      })
+
+    {:ok, _room} =
+      Rooms.update_room(gm, room, %{"prompt_template_id" => template.id, "language" => ""})
+
+    start_server()
+    {_player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      assert hd(messages).content == "Luna Lovegood speaks in rhyme."
+      {:ok, "Bonsoir!"}
+    end)
+
+    view |> form("#message-form", message: %{body: "Bonsoir!"}) |> render_submit()
+
+    assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+  end
+
   test "the cast speaks with the room's prompt template", %{gm: gm, room: room} do
     {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
 

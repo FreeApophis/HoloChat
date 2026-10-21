@@ -787,6 +787,11 @@ defmodule HoloChat.RoomsTest do
 
       assert {:error, changeset} = Rooms.update_room(gm, room, %{"language" => "xx"})
       assert %{language: [_]} = errors_on(changeset)
+
+      # No language: multilingual, like the lobby.
+      {:ok, room} = Rooms.update_room(gm, room, %{"language" => ""})
+      assert room.language == nil
+      assert %{language: nil} = Enum.find(Rooms.list_channels(), &(&1.name == room.name))
     end
 
     test "game masters choose a prompt template for the cast", %{gm: gm, room: room} do

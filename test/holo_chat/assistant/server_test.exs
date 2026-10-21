@@ -266,6 +266,22 @@ defmodule HoloChat.Assistant.ServerTest do
     assert_receive {:new_message, %{from_assistant: true, body: "Entschuldigung" <> _}}, 1000
   end
 
+  @tag :capture_log
+  test "apologizes in English in multilingual rooms", %{admin: admin, member: member} do
+    gm = user_scope_fixture()
+    room = HoloChat.RoomsFixtures.roleplay_room_fixture(gm)
+    {:ok, _} = Rooms.update_room(gm, room, %{"language" => ""})
+    {:ok, _} = Assistant.create_persona(admin, %{"name" => "Hilde", "rooms" => [room.name]})
+    Chat.subscribe(room.name)
+    enable(admin)
+    start_server()
+    expect(LLMMock, :chat, fn _url, _messages, _opts -> {:error, :econnrefused} end)
+
+    message_fixture(member, room.name, %{"body" => "@Hilde hola"})
+
+    assert_receive {:new_message, %{from_assistant: true, body: "Sorry" <> _}}, 1000
+  end
+
   test "status carries the persona's id and avatar", %{admin: admin, room: room, holo: holo} do
     {:ok, holo} =
       Assistant.update_persona_avatar(

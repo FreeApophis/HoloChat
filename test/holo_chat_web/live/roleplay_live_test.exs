@@ -195,6 +195,26 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       assert has_element?(room_view, "#room-language", "DE")
     end
 
+    test "let game masters make the room multilingual", %{conn: conn, room: room} do
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+
+      assert has_element?(
+               view,
+               "#scene-form select[name='room[language]'] option",
+               "Multilingual"
+             )
+
+      {:ok, room_view, _html} =
+        view
+        |> form("#scene-form", room: %{language: ""})
+        |> render_submit()
+        |> follow_redirect(conn)
+
+      assert Rooms.get_room(room.name).language == nil
+      assert has_element?(room_view, "#room-title")
+      refute has_element?(room_view, "#room-language")
+    end
+
     test "offer the prompt templates of the room's language", %{conn: conn, room: room} do
       {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
       admin = user_scope_fixture(admin)
@@ -218,6 +238,13 @@ defmodule HoloChatWeb.RoleplayLiveTest do
       view |> form("#scene-form", room: %{language: "de"}) |> render_change()
       assert has_element?(view, "#scene-form option", german)
       refute has_element?(view, "#scene-form option", english)
+
+      # Multilingual rooms use English templates.
+      view |> form("#scene-form", room: %{language: ""}) |> render_change()
+      assert has_element?(view, "#scene-form option", english)
+      refute has_element?(view, "#scene-form option", german)
+
+      view |> form("#scene-form", room: %{language: "de"}) |> render_change()
 
       view
       |> form("#scene-form", room: %{language: "de", prompt_template_id: reime.id})

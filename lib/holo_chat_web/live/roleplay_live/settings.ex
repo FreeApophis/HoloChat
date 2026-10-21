@@ -89,7 +89,9 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
             field={@form[:language]}
             type="select"
             label="Language spoken in the room"
-            options={Enum.map(Rooms.languages(), fn {code, name} -> {name, code} end)}
+            options={[
+              {"Multilingual", ""} | Enum.map(Rooms.languages(), fn {code, name} -> {name, code} end)
+            ]}
           />
           <fieldset id="reply-settings" class="mb-4 rounded-xl border border-base-300 p-4">
             <legend class="px-1 text-sm font-semibold">How the cast takes turns</legend>

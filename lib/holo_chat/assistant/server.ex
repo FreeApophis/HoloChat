@@ -35,7 +35,7 @@ defmodule HoloChat.Assistant.Server do
   alias HoloChat.Assistant.{Director, LLM, ScenePrompt}
 
   @max_queue 10
-  # By room language; rooms without a record speak English.
+  # By room language; multilingual rooms and rooms without a record get English.
   @apologies %{
     "en" => "Sorry, I can't answer right now. Please try again later.",
     "de" =>
@@ -381,10 +381,12 @@ defmodule HoloChat.Assistant.Server do
 
   # The room's template, unless it is in another language than the room
   # speaks (the game masters switched languages): then the Standard one of
-  # the room's language (nil).
+  # the room's language (nil). Multilingual rooms use English ones.
   defp template_body(room) do
+    room_language = room.language || "en"
+
     case Assistant.get_prompt_template(room.prompt_template_id) do
-      %{language: language, body: body} when language == room.language -> body
+      %{language: ^room_language, body: body} -> body
       _none_or_other_language -> nil
     end
   end
@@ -416,7 +418,7 @@ defmodule HoloChat.Assistant.Server do
     language =
       case Rooms.get_room(message.room) do
         nil -> "en"
-        room -> room.language
+        room -> room.language || "en"
       end
 
     apology = Map.fetch!(@apologies, language)
