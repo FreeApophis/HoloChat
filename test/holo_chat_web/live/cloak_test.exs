@@ -168,5 +168,26 @@ defmodule HoloChatWeb.CloakTest do
       assert html =~ "plays this character"
       refute has_element?(view, "#current-cloak")
     end
+
+    test "are taken off players when the game master forbids wearing them",
+         %{conn: conn, gm: gm, room: room, riker: riker} do
+      other = character_fixture(gm, %{"name" => "Ro Laren #{unique_tag()}"})
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}")
+      wear(view, riker)
+
+      {:ok, other_view, _html} =
+        build_conn_with_unique_ip()
+        |> log_in_user(user_fixture())
+        |> live(~p"/rooms/#{room.name}")
+
+      wear(other_view, other)
+
+      {:ok, _room} = Rooms.update_room(gm, room, %{"cloak_policy" => "forbid"})
+
+      refute has_element?(view, "#current-cloak")
+      assert Enum.map(Rooms.list_ai_cast(room), & &1.id) == [riker.id]
+      # Characters outside the cast stay worn.
+      assert has_element?(other_view, "#current-cloak", other.name)
+    end
   end
 end

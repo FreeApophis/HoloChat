@@ -292,14 +292,36 @@ defmodule HoloChat.Rooms do
   def can_manage?(scope, room), do: Accounts.moderator?(scope) or game_master?(scope, room)
 
   @doc """
-  Updates the room's settings (how the cast takes turns) and announces the
-  change.
+  Updates the room's settings (how the cast takes turns, whether players
+  may wear the cast's characters) and announces the change. Forbidding
+  takes the cast's characters off the players who wear them.
   """
   def update_room(scope, %Room{} = room, attrs) do
     authorize(scope, room, fn ->
-      room |> Room.changeset(attrs) |> Repo.update() |> broadcast_update()
+      room
+      |> Room.changeset(attrs)
+      |> Repo.update()
+      |> enforce_cloak_policy()
+      |> broadcast_update()
     end)
   end
+
+  # Under "forbid", players who wear one of the AI's characters take it off.
+  defp enforce_cloak_policy({:ok, %Room{cloak_policy: "forbid"} = room} = result) do
+    cast = cast_ids(room)
+
+    {_count, user_ids} =
+      Repo.delete_all(
+        from c in Cloak,
+          where: c.room == ^room.name and c.character_id in ^cast,
+          select: c.user_id
+      )
+
+    Enum.each(user_ids, &broadcast_cloak(room.name, &1))
+    result
+  end
+
+  defp enforce_cloak_policy(result), do: result
 
   @doc """
   Makes the room play another scenario: its suggested cast replaces the
@@ -586,7 +608,7 @@ defmodule HoloChat.Rooms do
     with %{} = character <- Characters.get_character(character_id) || {:error, :not_found},
          :ok <- check_cloak_policy(name, character),
          {:ok, _cloak} <- put_cloak(user, name, character) do
-      broadcast_cloak(name, user)
+      broadcast_cloak(name, user.id)
       {:ok, character}
     end
   end
@@ -621,7 +643,7 @@ defmodule HoloChat.Rooms do
   """
   def take_off_cloak(%Scope{user: %User{} = user}, name) do
     Repo.delete_all(from c in Cloak, where: c.user_id == ^user.id and c.room == ^name)
-    broadcast_cloak(name, user)
+    broadcast_cloak(name, user.id)
     :ok
   end
 
@@ -695,8 +717,8 @@ defmodule HoloChat.Rooms do
 
   # Room subscribers update the player's look; the assistant reloads the
   # cast it plays, since a player may have taken over a character.
-  defp broadcast_cloak(name, user) do
-    Phoenix.PubSub.broadcast(@pubsub, topic(name), {:cloak_changed, user.id})
+  defp broadcast_cloak(name, user_id) do
+    Phoenix.PubSub.broadcast(@pubsub, topic(name), {:cloak_changed, user_id})
     Phoenix.PubSub.broadcast(@pubsub, @scenes_topic, {:scene_changed, name})
   end
 

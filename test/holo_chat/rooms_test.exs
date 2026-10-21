@@ -774,6 +774,28 @@ defmodule HoloChat.RoomsTest do
       assert {:error, changeset} = Rooms.update_room(gm, room, %{"cloak_policy" => "chaos"})
       assert %{cloak_policy: [_]} = errors_on(changeset)
     end
+
+    test "forbidding takes the AI's characters off the players who wear them",
+         %{gm: gm, room: room, riker: riker, troi: troi} do
+      player = user_scope_fixture()
+      bystander = user_scope_fixture()
+      {:ok, _} = Rooms.wear_character(player, room.name, riker.id)
+      {:ok, _} = Rooms.wear_character(bystander, room.name, character_fixture(gm).id)
+      Rooms.subscribe(room.name)
+      Rooms.subscribe_scenes()
+
+      {:ok, _room} = Rooms.update_room(gm, room, %{"cloak_policy" => "forbid"})
+
+      assert Rooms.get_cloak(player, room.name) == nil
+      assert Rooms.get_cloak(bystander, room.name)
+      user_id = player.user.id
+      assert_receive {:cloak_changed, ^user_id}
+      name = room.name
+      assert_receive {:scene_changed, ^name}
+
+      assert Enum.sort(Enum.map(Rooms.list_ai_cast(room), & &1.id)) ==
+               Enum.sort([riker.id, troi.id])
+    end
   end
 
   describe "delete_message/2" do
