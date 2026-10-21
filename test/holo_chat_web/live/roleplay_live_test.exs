@@ -182,6 +182,8 @@ defmodule HoloChatWeb.RoleplayLiveTest do
     test "let game masters choose the room's language", %{conn: conn, room: room} do
       {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
       assert has_element?(view, "#scene-form select[name='room[language]'] option", "Deutsch")
+      {:ok, english_view, _html} = live(conn, ~p"/rooms/#{room.name}")
+      assert has_element?(english_view, "#room-language", "EN")
 
       {:ok, room_view, _html} =
         view

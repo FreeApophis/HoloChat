@@ -103,7 +103,7 @@ defmodule HoloChatWeb.HomeLiveTest do
       assert has_element?(view, "#destination-#{busy.name}", "3 players this week")
       assert has_element?(view, "#destination-#{quieter.name}", "Eldermere")
       assert has_element?(view, "#destination-#{busy.name} [data-role='language']", "DE")
-      refute has_element?(view, "#destination-#{quieter.name} [data-role='language']")
+      assert has_element?(view, "#destination-#{quieter.name} [data-role='language']", "EN")
       refute has_element?(view, "#destination-#{idle.name}")
       assert destination_ids(view) == ["destination-#{busy.name}", "destination-#{quieter.name}"]
 

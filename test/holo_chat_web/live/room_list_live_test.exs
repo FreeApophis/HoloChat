@@ -16,7 +16,7 @@ defmodule HoloChatWeb.RoomListLiveTest do
     %{gm: user_scope_fixture()}
   end
 
-  test "shows the language of rooms that don't speak English", %{conn: conn, gm: gm} do
+  test "shows the language every room speaks", %{conn: conn, gm: gm} do
     german = roleplay_room_fixture(gm)
     english = roleplay_room_fixture(gm)
     {:ok, _} = Rooms.update_room(gm, german, %{"language" => "de"})
@@ -24,7 +24,7 @@ defmodule HoloChatWeb.RoomListLiveTest do
     {:ok, view, _html} = live(conn, ~p"/rooms")
 
     assert has_element?(view, "#channel-#{german.name} [data-role='language']", "DE")
-    refute has_element?(view, "#channel-#{english.name} [data-role='language']")
+    assert has_element?(view, "#channel-#{english.name} [data-role='language']", "EN")
   end
 
   test "lists every room with its topic, game masters and people online", %{conn: conn, gm: gm} do

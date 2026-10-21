@@ -65,6 +65,7 @@ defmodule HoloChatWeb.AdminLive.PromptTemplateFormTest do
     test "writes templates in another language, starting from its Standard",
          %{conn: conn} do
       {:ok, overview, _html} = live(conn, ~p"/admin/assistant")
+      assert has_element?(overview, "#prompt-template-standard [data-role='language']", "EN")
       assert has_element?(overview, "#prompt-template-standard-de [data-role='language']", "DE")
 
       {:ok, standard, _html} =

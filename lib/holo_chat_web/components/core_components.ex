@@ -518,15 +518,12 @@ defmodule HoloChatWeb.CoreComponents do
   end
 
   @doc """
-  Shows the language a room speaks, as a small "DE"-style badge. English,
-  the default, shows nothing.
+  Shows the language a room speaks, as a small "EN"/"DE"-style badge.
   """
   attr :language, :string, required: true
   attr :id, :string, default: nil
   attr :class, :any, default: nil
   attr :on_dark, :boolean, default: false, doc: "for badges on images and dark overlays"
-
-  def language_badge(%{language: "en"} = assigns), do: ~H""
 
   def language_badge(assigns) do
     assigns =
