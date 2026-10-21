@@ -131,7 +131,8 @@ defmodule HoloChat.Rooms do
 
   @doc """
   The languages a room can speak, as `{code, name}`, English first: the
-  default, and the language of the lobby and record-less rooms.
+  default for new records. The lobby and record-less rooms are open to any
+  language (the assistant's own words there are English).
   """
   def languages, do: @languages
 
@@ -139,7 +140,7 @@ defmodule HoloChat.Rooms do
   Returns every room for the room list: the lobby, rooms with messages and
   rooms with a record, most recently active first, as maps with `:name`,
   `:topic` (the room's own, or that of the scenario played there),
-  `:scenario_title`, `:language`,
+  `:scenario_title`, `:language` (nil without a record: open to any language),
   `:game_masters` (`%{username:, avatar_id:}` by name) and `:last_message_at`.
   """
   def list_channels do
@@ -170,7 +171,7 @@ defmodule HoloChat.Rooms do
         name: name,
         topic: topics[name] || (scenario && scenario.topic),
         scenario_title: scenario && scenario.title,
-        language: if(room, do: room.language, else: "en"),
+        language: room && room.language,
         game_masters: if(room, do: Map.get(masters, room.id, []), else: []),
         last_message_at: last_message_at[name]
       }
