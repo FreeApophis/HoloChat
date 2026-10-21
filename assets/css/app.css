@@ -179,7 +179,9 @@
   100% { opacity: 0; transform: scale(0.6) rotate(200deg); }
 }
 
-.sparkle-regenerating, .sparkle-reveal { position: relative; }
+/* The reveal class stays after its animation, so nothing may stick out
+   sideways: the list would show a horizontal scrollbar. */
+.sparkle-regenerating, .sparkle-reveal { position: relative; overflow-x: clip; }
 
 .sparkle-regenerating [data-role="message-body"],
 .sparkle-regenerating [data-role="message-body"] * {
