@@ -283,7 +283,8 @@ defmodule HoloChat.Assistant.Server do
     {history, _more?} =
       Chat.list_messages_page(message.room, message, persona.context_messages - 1)
 
-    prompt = Assistant.build_prompt(persona, history ++ [message])
+    history = history ++ [message]
+    prompt = Assistant.build_prompt(persona, history, worn_characters(history))
 
     with {:ok, text} <-
            LLM.impl().chat(endpoint_url, prompt,

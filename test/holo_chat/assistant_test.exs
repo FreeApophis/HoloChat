@@ -7,6 +7,7 @@ defmodule HoloChat.AssistantTest do
   alias HoloChat.Accounts
   alias HoloChat.Assistant
   alias HoloChat.Assistant.{LLMMock, Persona, Settings}
+  alias HoloChat.Characters.Character
   alias HoloChat.Chat.Message
 
   setup :verify_on_exit!
@@ -264,6 +265,24 @@ defmodule HoloChat.AssistantTest do
 
       assert [_system, %{role: "user", content: "Sage: Use a GenServer."}] =
                Assistant.build_prompt(persona, history)
+    end
+
+    test "shows players who wear a character by that character's name" do
+      persona = %Persona{name: "Holo", system_prompt: "You are {name}."}
+      riker = %Character{id: 7, name: "Riker"}
+
+      history = [
+        %Message{username: "ada", body: "@Holo hi", from_assistant: false, character_id: 7},
+        %Message{username: "ada", body: "/me nods", from_assistant: false, character_id: 7},
+        %Message{username: "Data", body: "Hm.", from_assistant: true, character_id: 9}
+      ]
+
+      assert [
+               _system,
+               %{role: "user", content: "Riker: @Holo hi"},
+               %{role: "user", content: "*Riker nods*"},
+               %{role: "user", content: "Data: Hm."}
+             ] = Assistant.build_prompt(persona, history, %{7 => riker})
     end
   end
 

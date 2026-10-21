@@ -6,8 +6,9 @@ defmodule HoloChat.Assistant.ServerTest do
   import Mox
   import HoloChat.AccountsFixtures
   import HoloChat.ChatFixtures
+  import HoloChat.CharactersFixtures
 
-  alias HoloChat.{Accounts, Assistant, Chat}
+  alias HoloChat.{Accounts, Assistant, Chat, Rooms}
   alias HoloChat.Assistant.{LLMMock, Server}
 
   setup :set_mox_global
@@ -42,6 +43,27 @@ defmodule HoloChat.Assistant.ServerTest do
                    1000
 
     assert reply.persona_id == holo.id
+  end
+
+  test "sees a cloaked player by the character they wear",
+       %{admin: admin, member: member, room: room} do
+    enable(admin)
+    start_server()
+    riker = character_fixture(admin, %{"name" => "Riker"})
+    {:ok, _} = Rooms.wear_character(member, room, riker.id)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      prompt = Enum.map_join(messages, "
+", & &1.content)
+      assert List.last(messages).content == "Riker: @Holo hi"
+      refute prompt =~ member.user.username
+      {:ok, "Hello, Riker."}
+    end)
+
+    {:ok, _} = Rooms.post_message(member, room, %{"body" => "Before."})
+    {:ok, _} = Rooms.post_message(member, room, %{"body" => "@Holo hi"})
+
+    assert_receive {:new_message, %{from_assistant: true, body: "Hello, Riker."}}, 1000
   end
 
   test "ignores messages that don't mention a persona",

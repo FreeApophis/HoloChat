@@ -206,8 +206,11 @@ defmodule HoloChat.Assistant do
   the room's recent `history` (oldest first). Only the persona's own replies
   are assistant turns; everyone else, including other personas, appears as
   "name: message".
+
+  `worn` maps character ids to the characters players wore when writing
+  their messages: those players appear by their character's name.
   """
-  def build_prompt(%Persona{name: name} = persona, history) do
+  def build_prompt(%Persona{name: name} = persona, history, worn \\ %{}) do
     system = String.replace(persona.system_prompt, "{name}", name)
 
     [
@@ -216,11 +219,21 @@ defmodule HoloChat.Assistant do
           %{from_assistant: true, username: ^name, body: body} ->
             %{role: "assistant", content: body}
 
-          %{username: username, body: body} ->
-            %{role: "user", content: chat_line(username, body)}
+          %{body: body} = message ->
+            %{role: "user", content: chat_line(author_name(message, worn), body)}
         end)
     ]
   end
+
+  defp author_name(%{from_assistant: false, character_id: id, username: username}, worn)
+       when is_integer(id) do
+    case worn[id] do
+      nil -> username
+      character -> character.name
+    end
+  end
+
+  defp author_name(%{username: username}, _worn), do: username
 
   @doc """
   How someone's message reads in a prompt: "name: message", or "*name
