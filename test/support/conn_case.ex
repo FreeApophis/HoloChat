@@ -41,6 +41,17 @@ defmodule HoloChatWeb.ConnCase do
   end
 
   @doc """
+  Waits until the LiveView has handled the messages already sent to it.
+
+  A test that received a PubSub broadcast may get there before the LiveView
+  it shares the topic with: call this before asserting on the page.
+  """
+  def await_view(%Phoenix.LiveViewTest.View{pid: pid}) do
+    _ = :sys.get_state(pid)
+    :ok
+  end
+
+  @doc """
   Builds a conn whose client IP (as seen by controllers and LiveViews)
   is unique to it, so per-IP rate limits don't leak between async tests.
   """

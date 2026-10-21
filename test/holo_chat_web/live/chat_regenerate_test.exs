@@ -54,10 +54,12 @@ defmodule HoloChatWeb.ChatRegenerateTest do
 
     assert_receive {:generating, llm}, 1000
     assert_receive {:message_regenerating, %{id: id}} when id == reply.id
+    await_view(view)
     assert has_element?(view, "#messages-#{reply.id} [data-regenerating]")
 
     send(llm, :continue)
     assert_receive {:message_updated, %{id: ^id}}, 1000
+    await_view(view)
 
     refute has_element?(view, "#messages-#{reply.id} [data-regenerating]")
     assert has_element?(view, "#messages-#{reply.id}", "a dragon learned to knit")

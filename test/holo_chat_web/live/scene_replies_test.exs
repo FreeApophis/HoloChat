@@ -70,6 +70,7 @@ defmodule HoloChatWeb.SceneRepliesTest do
 
     assert id == luna.id
     assert body == "*smiles* Have you seen any Nargles?"
+    await_view(view)
 
     assert has_element?(view, "#messages-#{reply.id} [data-role='author']", "Luna Lovegood")
     assert has_element?(view, "#messages-#{reply.id} [data-role='assistant-badge']")
@@ -126,6 +127,7 @@ defmodule HoloChatWeb.SceneRepliesTest do
 
     assert_receive {:message_updated, %{id: id, body: "Hello! Neville" <> _}}, 1000
     assert id == reply.id
+    await_view(view)
     assert has_element?(view, "#messages-#{reply.id}", "a Wrackspurt")
     refute_receive {:new_message, %{from_assistant: true}}, 300
   end

@@ -144,7 +144,9 @@ Also:
 - Ordering by timestamp alone is not deterministic: the Windows clock can give consecutive rows
   the same `inserted_at`. Always add the id as a tie-breaker.
 - **No `Process.sleep`.** Synchronise on real signals: `assert_receive`, `:sys.get_state/1`, or the
-  `await_presence/1` pattern in `test/holo_chat_web/live/chat_presence_test.exs`. For timers, send
+  `await_presence/1` pattern in `test/holo_chat_web/live/chat_presence_test.exs`. A test that
+  `assert_receive`s a broadcast may see it before the LiveView does: call `await_view(view)`
+  (`ConnCase`) before asserting on the page. For timers, send
   the timer message directly (`send(view.pid, :typing_timeout)`) instead of waiting.
 - Test data comes from plain fixture functions in `test/support/fixtures/<context>_fixtures.ex`
   (`HoloChat.AccountsFixtures`, `HoloChat.ChatFixtures`), built on the context's public API. Don't use factory libraries
