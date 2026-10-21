@@ -78,6 +78,31 @@ defmodule HoloChatWeb.SceneRepliesTest do
     assert has_element?(view, "#profile-card", "Dreamy Ravenclaw.")
   end
 
+  test "the cast speaks with the room's prompt template", %{gm: gm, room: room} do
+    {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+    {:ok, template} =
+      Assistant.create_prompt_template(user_scope_fixture(admin), %{
+        "name" => "Rhymes #{System.unique_integer([:positive])}",
+        "body" => "{{char}} speaks in rhyme.\n\n# Scene\n{{scenario}}"
+      })
+
+    {:ok, _room} = Rooms.update_room(gm, room, %{"prompt_template_id" => template.id})
+    start_server()
+    {_player, view} = join(room)
+
+    expect(LLMMock, :chat, fn _url, messages, _opts ->
+      assert hd(messages).content ==
+               "Luna Lovegood speaks in rhyme.\n\n# Scene\nA tea party in the Burrow."
+
+      {:ok, "Tea for me and tea for thee."}
+    end)
+
+    view |> form("#message-form", message: %{body: "Good evening!"}) |> render_submit()
+
+    assert_receive {:new_message, %{username: "Luna Lovegood"}}, 1000
+  end
+
   test "a character's latest reply can be regenerated", %{gm: gm, room: room} do
     neville = character_fixture(gm, %{"name" => "Neville Longbottom"})
     {:ok, _} = Rooms.cast_character(gm, room, neville.id)

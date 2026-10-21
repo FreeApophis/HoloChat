@@ -8,7 +8,7 @@ defmodule HoloChat.AssistantTest do
 
   alias HoloChat.Accounts
   alias HoloChat.Assistant
-  alias HoloChat.Assistant.{LLMMock, Persona, Settings}
+  alias HoloChat.Assistant.{LLMMock, Persona, PromptTemplate, Settings}
   alias HoloChat.Characters.Character
   alias HoloChat.Chat
   alias HoloChat.Chat.Message
@@ -203,6 +203,56 @@ defmodule HoloChat.AssistantTest do
       {:ok, _} = Assistant.delete_persona(admin, persona)
 
       assert HoloChat.Avatars.get_avatar(persona.avatar_id) == nil
+    end
+  end
+
+  describe "prompt templates" do
+    defp template_name, do: "Template #{System.unique_integer([:positive])}"
+
+    test "admins create, update and delete them", %{admin: admin} do
+      name = template_name()
+      attrs = %{"name" => "  #{name} ", "body" => "Be {{char}}."}
+
+      assert {:ok, %PromptTemplate{name: ^name} = template} =
+               Assistant.create_prompt_template(admin, attrs)
+
+      assert template in Assistant.list_prompt_templates()
+      assert Assistant.get_prompt_template(template.id) == template
+      assert Assistant.get_prompt_template(nil) == nil
+
+      assert {:ok, %{body: "Be {{char}}, briefly."}} =
+               Assistant.update_prompt_template(admin, template, %{
+                 "body" => "Be {{char}}, briefly."
+               })
+
+      assert {:ok, _} = Assistant.delete_prompt_template(admin, template)
+      assert Assistant.get_prompt_template(template.id) == nil
+    end
+
+    test "need a unique name and a body", %{admin: admin} do
+      name = template_name()
+      {:ok, _} = Assistant.create_prompt_template(admin, %{"name" => name, "body" => "x"})
+
+      assert {:error, changeset} = Assistant.create_prompt_template(admin, %{"name" => name})
+      assert %{body: ["can't be blank"]} = errors_on(changeset)
+
+      assert {:error, changeset} =
+               Assistant.create_prompt_template(admin, %{"name" => name, "body" => "y"})
+
+      assert %{name: ["has already been taken"]} = errors_on(changeset)
+    end
+
+    test "are refused to everyone else", %{member: member} do
+      assert {:error, :unauthorized} =
+               Assistant.create_prompt_template(member, %{
+                 "name" => template_name(),
+                 "body" => "x"
+               })
+    end
+
+    test "the built-in template is today's scene prompt" do
+      assert Assistant.default_prompt_template() =~ "You are playing {{char}}"
+      assert Assistant.default_prompt_template() =~ "{{others}}"
     end
   end
 

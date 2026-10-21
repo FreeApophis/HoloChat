@@ -42,9 +42,9 @@ HoloChat.Application   top-level; deps: HoloChat, HoloChatWeb (supervision only)
 HoloChatWeb            deps: HoloChat; exports Endpoint, Telemetry, Presence, RateLimit,
                        AssistantPresence
 HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Chat.Message,
-                       Assistant, Assistant.{Settings, Persona, Server}, Avatars, Avatars.Avatar,
-                       Cards, Characters, Characters.{Character, Tags}, News, News.{Post, Comment}, Rooms,
-                       Rooms.Room, Scenarios, Scenarios.Scenario
+                       Assistant, Assistant.{Settings, Persona, PromptTemplate, Server}, Avatars,
+                       Avatars.Avatar, Cards, Characters, Characters.{Character, Tags}, News,
+                       News.{Post, Comment}, Rooms, Rooms.Room, Scenarios, Scenarios.Scenario
 ├── HoloChat.Repo      sub-boundary; private to the core
 ├── HoloChat.Avatars   sub-boundary; deps: Repo; exports Avatar (all images, stored in the DB)
 ├── HoloChat.Accounts  sub-boundary; deps: Repo, Avatars; exports User, Scope
@@ -62,7 +62,8 @@ HoloChat               core; exports Accounts, Accounts.{User, Scope}, Chat, Cha
 │                      the scenario it plays with a cast, switched with an announcing message;
 │                      the lobby and older chat rooms have no record)
 └── HoloChat.Assistant sub-boundary; deps: Repo, Accounts, Avatars, Characters, Chat, Rooms;
-                       exports Settings, Persona, LLM, Server (personas, and the cast in scenes)
+                       exports Settings, Persona, PromptTemplate, LLM, Server (personas, and the
+                       cast in scenes with its admin-written prompt templates)
 ```
 
 Rules:

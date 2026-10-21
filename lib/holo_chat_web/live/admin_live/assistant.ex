@@ -160,6 +160,57 @@ defmodule HoloChatWeb.AdminLive.Assistant do
             </li>
           </ul>
         </section>
+
+        <section id="prompt-templates">
+          <div class="mb-2 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold">Prompt templates</h2>
+              <p class="text-xs opacity-60">
+                How cast characters are told to play. Game masters pick one per scene.
+              </p>
+            </div>
+            <.link
+              id="new-prompt-template"
+              navigate={~p"/admin/assistant/templates/new"}
+              class="btn btn-soft btn-sm"
+            >
+              <.icon name="hero-plus" class="size-4" /> New template
+            </.link>
+          </div>
+          <ul class="divide-y divide-base-300 rounded-xl border border-base-300">
+            <li id="prompt-template-standard" class="flex items-center gap-3 px-3 py-2 text-sm">
+              <.icon name="hero-document-text" class="size-4 opacity-60" />
+              <span class="font-semibold">Standard</span>
+              <span class="min-w-0 flex-1 truncate opacity-70">built in, used unless a scene picks another</span>
+            </li>
+            <li
+              :for={template <- @prompt_templates}
+              id={"prompt-template-#{template.id}"}
+              class="flex items-center gap-3 px-3 py-2 text-sm"
+            >
+              <.icon name="hero-document-text" class="size-4 opacity-60" />
+              <span class="min-w-0 flex-1 truncate font-semibold">{template.name}</span>
+              <.link
+                id={"edit-prompt-template-#{template.id}"}
+                navigate={~p"/admin/assistant/templates/#{template.id}/edit"}
+                class="rounded-lg p-1.5 transition hover:bg-base-200"
+                aria-label={"Edit #{template.name}"}
+              >
+                <.icon name="hero-pencil-square" class="size-4" />
+              </.link>
+              <button
+                id={"delete-prompt-template-#{template.id}"}
+                phx-click="delete_prompt_template"
+                phx-value-id={template.id}
+                data-confirm={"Delete #{template.name}? Scenes using it go back to Standard."}
+                class="rounded-lg p-1.5 text-error transition hover:bg-base-200"
+                aria-label={"Delete #{template.name}"}
+              >
+                <.icon name="hero-trash" class="size-4" />
+              </button>
+            </li>
+          </ul>
+        </section>
       </div>
     </Layouts.app>
     """
@@ -172,6 +223,7 @@ defmodule HoloChatWeb.AdminLive.Assistant do
      |> assign(:page_title, "AI assistant")
      |> assign(:connection, nil)
      |> assign(:personas, Assistant.list_personas())
+     |> assign(:prompt_templates, Assistant.list_prompt_templates())
      |> assign_form(Assistant.change_settings(Assistant.get_settings()))}
   end
 
@@ -206,6 +258,20 @@ defmodule HoloChatWeb.AdminLive.Assistant do
      socket
      |> put_flash(:info, "Deleted @#{persona.name}.")
      |> assign(:personas, Assistant.list_personas())}
+  end
+
+  def handle_event("delete_prompt_template", %{"id" => id}, socket) do
+    scope = socket.assigns.current_scope
+
+    socket =
+      with %{} = template <- Assistant.get_prompt_template(id),
+           {:ok, _} <- Assistant.delete_prompt_template(scope, template) do
+        put_flash(socket, :info, "Deleted #{template.name}.")
+      else
+        _gone_or_refused -> socket
+      end
+
+    {:noreply, assign(socket, :prompt_templates, Assistant.list_prompt_templates())}
   end
 
   def handle_event("test_connection", _params, socket) do

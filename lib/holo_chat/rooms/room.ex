@@ -12,6 +12,9 @@ defmodule HoloChat.Rooms.Room do
     field :max_ai_turns, :integer, default: 2
     # When a player wears a character the AI plays here: "takeover" or "forbid".
     field :cloak_policy, :string, default: "takeover"
+    # The assistant's prompt template for the cast; nil for the built-in one.
+    # A plain id: Rooms doesn't depend on Assistant.
+    field :prompt_template_id, :id
     belongs_to :scenario, HoloChat.Scenarios.Scenario
 
     timestamps(type: :utc_datetime)
@@ -33,15 +36,23 @@ defmodule HoloChat.Rooms.Room do
   end
 
   @doc """
-  Changeset for the settings the game masters edit: how the cast takes turns
-  and whether players may wear the cast's characters.
+  Changeset for the settings the game masters edit: how the cast takes turns,
+  whether players may wear the cast's characters, and the cast's prompt
+  template.
   """
   def changeset(room, attrs) do
     room
-    |> cast(attrs, [:reply_policy, :reply_delay, :max_ai_turns, :cloak_policy])
+    |> cast(attrs, [
+      :reply_policy,
+      :reply_delay,
+      :max_ai_turns,
+      :cloak_policy,
+      :prompt_template_id
+    ])
     |> validate_inclusion(:reply_policy, ~w(natural mention))
     |> validate_inclusion(:cloak_policy, ~w(takeover forbid))
     |> validate_number(:reply_delay, greater_than_or_equal_to: 0, less_than_or_equal_to: 60)
     |> validate_number(:max_ai_turns, greater_than_or_equal_to: 1, less_than_or_equal_to: 5)
+    |> foreign_key_constraint(:prompt_template_id, message: "does not exist")
   end
 end

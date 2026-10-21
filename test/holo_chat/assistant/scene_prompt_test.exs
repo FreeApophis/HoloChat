@@ -99,6 +99,70 @@ defmodule HoloChat.Assistant.ScenePromptTest do
     end
   end
 
+  describe "build/6 with a template" do
+    test "fills in the placeholders" do
+      template = """
+      Play {{char}}. {{description}} {{personality}}
+
+      # {{scenario_title}}
+      {{scenario}}
+
+      # With you
+      {{others}}
+      """
+
+      [system | _] =
+        ScenePrompt.build(@room, @luna, [@luna, @neville], [human("ada", "Hi")], %{}, template)
+
+      assert system.content ==
+               String.trim("""
+               Play Luna. Dreamy Ravenclaw. Calm.
+
+               # Tea at the Burrow
+               A rainy afternoon.
+
+               # With you
+               - Neville: Shy.
+               - ada (a player)
+               """)
+    end
+
+    test "leaves out lines, and paragraphs, whose placeholders are all empty" do
+      template =
+        "Play {{char}}.\n{{description}}\n\nPersonality:\n{{personality}}\n\n" <>
+          "# Scene\n{{scenario}}\n\nEnd."
+
+      plain = %{@luna | personality: nil, description: nil}
+
+      [system | _] = ScenePrompt.build(%Room{scenario: nil}, plain, [plain], [], %{}, template)
+
+      assert system.content == "Play Luna.\n\nEnd."
+    end
+
+    test "keeps unknown placeholders and doesn't fill in placeholders from values" do
+      sneaky = %{@luna | description: "Says {{others}}."}
+
+      [system | _] =
+        ScenePrompt.build(@room, sneaky, [sneaky], [], %{}, "{{description}} {{user}}")
+
+      assert system.content == "Says {{others}}. {{user}}"
+    end
+
+    test "without a template, uses the built-in one" do
+      history = [human("ada", "Hi")]
+
+      assert ScenePrompt.build(@room, @luna, [@luna], history, %{}, nil) ==
+               ScenePrompt.build(
+                 @room,
+                 @luna,
+                 [@luna],
+                 history,
+                 %{},
+                 ScenePrompt.default_template()
+               )
+    end
+  end
+
   describe "clean/3" do
     test "drops a leading name and stops where the model writes for someone else" do
       text = "Luna: *looks up* Oh, hello.\nNeville: Hi Luna!\nLuna: More."

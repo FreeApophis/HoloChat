@@ -361,7 +361,9 @@ defmodule HoloChat.Assistant.Server do
          cast = Rooms.list_ai_cast(room),
          %{} = character <- Enum.find(cast, &(&1.id == character.id)) || {:error, :not_cast},
          worn = worn_characters(history),
-         prompt = ScenePrompt.build(room, character, cast, history, worn),
+         template = Assistant.get_prompt_template(room.prompt_template_id),
+         prompt =
+           ScenePrompt.build(room, character, cast, history, worn, template && template.body),
          {:ok, text} <-
            LLM.impl().chat(endpoint_url, prompt,
              max_tokens: @scene_max_tokens,

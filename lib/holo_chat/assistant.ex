@@ -15,13 +15,13 @@ defmodule HoloChat.Assistant do
       HoloChat.Chat,
       HoloChat.Rooms
     ],
-    exports: [Settings, Persona, LLM, Server]
+    exports: [Settings, Persona, PromptTemplate, LLM, Server]
 
   import Ecto.Query, warn: false
 
   alias HoloChat.Accounts
   alias HoloChat.Accounts.{Scope, User}
-  alias HoloChat.Assistant.{LLM, Persona, Settings}
+  alias HoloChat.Assistant.{LLM, Persona, PromptTemplate, ScenePrompt, Settings}
   alias HoloChat.Avatars
   alias HoloChat.Chat
   alias HoloChat.Chat.Message
@@ -155,6 +155,60 @@ defmodule HoloChat.Assistant do
   end
 
   defp notify_personas_changed(error), do: error
+
+  ## Prompt templates
+
+  @doc """
+  The built-in prompt template for cast characters, used by rooms that chose
+  none. See `HoloChat.Assistant.ScenePrompt` for its placeholders.
+  """
+  def default_prompt_template, do: ScenePrompt.default_template()
+
+  @doc """
+  Returns all prompt templates, ordered by name.
+  """
+  def list_prompt_templates do
+    Repo.all(from t in PromptTemplate, order_by: [t.name, t.id])
+  end
+
+  @doc """
+  Gets a prompt template, or nil if it does not exist (or `id` is nil).
+  """
+  def get_prompt_template(nil), do: nil
+  def get_prompt_template(id), do: Repo.get(PromptTemplate, id)
+
+  @doc """
+  Returns a changeset for editing a prompt template in a form.
+  """
+  def change_prompt_template(%PromptTemplate{} = template, attrs \\ %{}) do
+    PromptTemplate.changeset(template, attrs)
+  end
+
+  @doc """
+  Creates a prompt template (admins only).
+  """
+  def create_prompt_template(scope, attrs) do
+    with :ok <- authorize(scope) do
+      %PromptTemplate{} |> PromptTemplate.changeset(attrs) |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Updates a prompt template (admins only).
+  """
+  def update_prompt_template(scope, %PromptTemplate{} = template, attrs) do
+    with :ok <- authorize(scope) do
+      template |> PromptTemplate.changeset(attrs) |> Repo.update()
+    end
+  end
+
+  @doc """
+  Deletes a prompt template (admins only). Rooms that used it fall back to
+  the built-in one.
+  """
+  def delete_prompt_template(scope, %PromptTemplate{} = template) do
+    with :ok <- authorize(scope), do: Repo.delete(template)
+  end
 
   ## Connection
 

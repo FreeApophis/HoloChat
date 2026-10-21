@@ -8,7 +8,7 @@ defmodule HoloChatWeb.RoleplayLiveTest do
   import HoloChat.RoomsFixtures
   import HoloChat.ScenariosFixtures
 
-  alias HoloChat.{Accounts, Rooms, Scenarios}
+  alias HoloChat.{Accounts, Assistant, Rooms, Scenarios}
 
   describe "scenes in the scenario library" do
     test "the sparkle icon leads to the scenario library", %{conn: conn} do
@@ -177,6 +177,45 @@ defmodule HoloChatWeb.RoleplayLiveTest do
                view,
                "#edit-scenario-link[href='/scenarios/#{room.scenario_id}/edit']"
              )
+    end
+
+    test "let game masters choose the cast's prompt template", %{conn: conn, room: room} do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+      name = "Rhymes #{System.unique_integer([:positive])}"
+
+      {:ok, template} =
+        Assistant.create_prompt_template(user_scope_fixture(admin), %{
+          "name" => name,
+          "body" => "{{char}} speaks in rhyme."
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+
+      assert has_element?(
+               view,
+               "#scene-form select[name='room[prompt_template_id]'] option",
+               name
+             )
+
+      view
+      |> form("#scene-form", room: %{prompt_template_id: template.id})
+      |> render_submit()
+
+      assert Rooms.get_room(room.name).prompt_template_id == template.id
+
+      {:ok, view, _html} = live(conn, ~p"/rooms/#{room.name}/settings")
+
+      assert has_element?(
+               view,
+               "#scene-form option[value='#{template.id}'][selected]",
+               name
+             )
+
+      view
+      |> form("#scene-form", room: %{prompt_template_id: ""})
+      |> render_submit()
+
+      assert Rooms.get_room(room.name).prompt_template_id == nil
     end
 
     test "offer the scenario editor only to its owner", %{gm: gm} do

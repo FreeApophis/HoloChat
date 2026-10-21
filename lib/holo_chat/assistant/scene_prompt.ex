@@ -8,13 +8,52 @@ defmodule HoloChat.Assistant.ScenePrompt do
   profile descriptions are never sent to the model. The history starts
   after the latest scenario change: the cast doesn't remember earlier
   scenarios.
+
+  The system prompt is written from a template (see
+  `HoloChat.Assistant.PromptTemplate`) with these placeholders:
+
+    * `{{char}}`: the character's name
+    * `{{description}}`, `{{personality}}`: the character's sheet
+    * `{{scenario_title}}`, `{{scenario}}`: the room's scenario
+    * `{{others}}`: who else is in the scene, one "- Name: ..." line each
+
+  A line whose placeholders are all empty is left out, and so is a
+  paragraph that loses all of its placeholder lines, so a "Personality:"
+  label disappears with an empty personality.
   """
 
   alias HoloChat.Assistant
 
+  @default_template """
+  You are playing {{char}} in a group role-play with several participants. \
+  Write only {{char}}'s next message: what {{char}} says and does, in character. \
+  Put actions in *asterisks*. Never write lines or actions for anyone else, \
+  and don't narrate the scene. Keep it to one or two short paragraphs.
+
+  # Scene: {{scenario_title}}
+  {{scenario}}
+
+  # {{char}}
+  {{description}}
+
+  Personality:
+  {{personality}}
+
+  # Others in the scene
+  {{others}}
+  """
+
+  @placeholders ~w(char description personality scenario_title scenario others)
+
+  @doc """
+  The built-in template, used by rooms that chose none.
+  """
+  def default_template, do: @default_template
+
   @doc """
   Builds the chat completion messages for `character` in `room` with the
-  scene's `cast` and recent `history` (oldest first).
+  scene's `cast` and recent `history` (oldest first), with the system
+  prompt written from `template` (the built-in one when nil).
 
   The character's own messages are assistant turns; everything else is
   merged into user turns of "Name: message" lines, which keeps turns
@@ -24,14 +63,14 @@ defmodule HoloChat.Assistant.ScenePrompt do
   their messages: those players appear as their character, played by a
   human.
   """
-  def build(room, character, cast, history, worn \\ %{}) do
+  def build(room, character, cast, history, worn \\ %{}, template \\ nil) do
     history =
       history
       |> since_scenario_change()
       |> Enum.map(&Map.put(&1, :speaker, speaker(&1, worn)))
 
     [
-      %{role: "system", content: system_prompt(room, character, cast, history)}
+      %{role: "system", content: system_prompt(template, room, character, cast, history)}
       | turns(character, history)
     ]
   end
@@ -48,30 +87,61 @@ defmodule HoloChat.Assistant.ScenePrompt do
 
   defp speaker(%{username: username}, _worn), do: {username, nil}
 
-  defp system_prompt(room, character, cast, history) do
-    name = character.name
+  defp system_prompt(template, room, character, cast, history) do
+    scenario = room.scenario || %{title: nil, description: nil}
 
-    [
-      "You are playing #{name} in a group role-play with several participants. " <>
-        "Write only #{name}'s next message: what #{name} says and does, in character. " <>
-        "Put actions in *asterisks*. Never write lines or actions for anyone else, " <>
-        "and don't narrate the scene. Keep it to one or two short paragraphs.",
-      scene(room.scenario),
-      section(
-        name,
-        [
-          character.description,
-          labeled("Personality", character.personality)
-        ]
-      ),
-      section("Others in the scene", others(character, cast, history))
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join("\n\n")
+    values = %{
+      "char" => character.name,
+      "description" => character.description,
+      "personality" => character.personality,
+      "scenario_title" => scenario.title,
+      "scenario" => scenario.description,
+      "others" => Enum.join(others(character, cast, history), "\n")
+    }
+
+    render(template || @default_template, values)
   end
 
-  defp scene(nil), do: nil
-  defp scene(scenario), do: section("Scene: #{scenario.title}", scenario.description)
+  defp render(template, values) do
+    template
+    |> String.split(~r/\n\s*\n/)
+    |> Enum.flat_map(&render_paragraph(&1, values))
+    |> Enum.join("\n\n")
+    |> String.trim()
+  end
+
+  # Nothing if the paragraph had placeholder lines and lost them all.
+  defp render_paragraph(paragraph, values) do
+    lines = paragraph |> String.split("\n") |> Enum.map(&render_line(&1, values))
+
+    if :dropped in lines and not Enum.any?(lines, &match?({:filled, _text}, &1)) do
+      []
+    else
+      [Enum.map_join(for({_kind, text} <- lines, do: text), "\n", & &1)]
+    end
+  end
+
+  # {:static, text} without placeholders, {:filled, text} with at least one
+  # filled in, :dropped when all of them are empty.
+  defp render_line(line, values) do
+    names = Regex.scan(placeholder_regex(), line, capture: :all_but_first)
+
+    cond do
+      names == [] ->
+        {:static, line}
+
+      Enum.all?(names, fn [name] -> blank?(values[name]) end) ->
+        :dropped
+
+      true ->
+        {:filled,
+         Regex.replace(placeholder_regex(), line, fn _match, name -> values[name] || "" end)}
+    end
+  end
+
+  defp placeholder_regex, do: ~r/\{\{(#{Enum.join(@placeholders, "|")})\}\}/
+
+  defp blank?(value), do: value in [nil, ""] or String.trim(value) == ""
 
   defp since_scenario_change(history) do
     case Enum.find_index(Enum.reverse(history), &(&1.kind == "scenario")) do
@@ -109,20 +179,6 @@ defmodule HoloChat.Assistant.ScenePrompt do
       nil -> ": " <> String.slice(description, 0, 160)
     end
   end
-
-  defp labeled(_label, blank) when blank in [nil, ""], do: nil
-  defp labeled(label, text), do: "#{label}:\n#{text}"
-
-  defp section(_title, blank) when blank in [nil, "", []], do: nil
-
-  defp section(title, parts) when is_list(parts) do
-    case Enum.reject(parts, &(&1 in [nil, ""])) do
-      [] -> nil
-      parts -> "# #{title}\n" <> Enum.join(parts, "\n")
-    end
-  end
-
-  defp section(title, text), do: "# #{title}\n#{text}"
 
   defp turns(character, history) do
     history

@@ -7,7 +7,7 @@ defmodule HoloChat.RoomsTest do
   import HoloChat.RoomsFixtures
   import HoloChat.ScenariosFixtures
 
-  alias HoloChat.{Accounts, Chat, Rooms, Scenarios}
+  alias HoloChat.{Accounts, Assistant, Chat, Rooms, Scenarios}
   alias HoloChat.Rooms.Room
   alias HoloChat.Scenarios.Scenario
 
@@ -773,6 +773,22 @@ defmodule HoloChat.RoomsTest do
 
       assert {:error, changeset} = Rooms.update_room(gm, room, %{"cloak_policy" => "chaos"})
       assert %{cloak_policy: [_]} = errors_on(changeset)
+    end
+
+    test "game masters choose a prompt template for the cast", %{gm: gm, room: room} do
+      {:ok, admin} = Accounts.set_admin(user_fixture().username, true)
+
+      {:ok, template} =
+        Assistant.create_prompt_template(user_scope_fixture(admin), %{
+          "name" => "Rhymes #{System.unique_integer([:positive])}",
+          "body" => "Rhyme, {{char}}."
+        })
+
+      {:ok, room} = Rooms.update_room(gm, room, %{"prompt_template_id" => template.id})
+      assert room.prompt_template_id == template.id
+
+      assert {:error, changeset} = Rooms.update_room(gm, room, %{"prompt_template_id" => "-1"})
+      assert %{prompt_template_id: ["does not exist"]} = errors_on(changeset)
     end
 
     test "forbidding takes the AI's characters off the players who wear them",

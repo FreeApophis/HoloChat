@@ -1,7 +1,7 @@
 defmodule HoloChatWeb.RoleplayLive.Settings do
   use HoloChatWeb, :live_view
 
-  alias HoloChat.{Characters, Rooms, Scenarios}
+  alias HoloChat.{Assistant, Characters, Rooms, Scenarios}
 
   @impl true
   def render(assigns) do
@@ -125,6 +125,15 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
                 {"Not allowed: the cast belongs to the AI", "forbid"}
               ]}
             />
+            <.input
+              field={@form[:prompt_template_id]}
+              type="select"
+              label="Prompt template"
+              options={[{"Standard (built-in)", ""} | @template_options]}
+            />
+            <p class="text-xs opacity-60">
+              How the cast is told to play their characters. Admins write the templates.
+            </p>
           </fieldset>
 
           <.button variant="primary" phx-disable-with="Saving…">Save settings</.button>
@@ -203,6 +212,10 @@ defmodule HoloChatWeb.RoleplayLive.Settings do
        socket
        |> assign(:page_title, "Scene settings")
        |> assign(:scenario_options, Enum.map(Scenarios.list_scenarios(), &{&1.title, &1.id}))
+       |> assign(
+         :template_options,
+         Enum.map(Assistant.list_prompt_templates(), &{&1.name, &1.id})
+       )
        |> assign(:master_form, to_form(%{"username" => ""}, as: :master))
        |> assign(:search_form, to_form(%{"query" => ""}, as: :search))
        |> assign_room(room)

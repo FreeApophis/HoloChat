@@ -19,6 +19,7 @@ defmodule HoloChat do
       Avatars.Avatar,
       Cards,
       Assistant.Persona,
+      Assistant.PromptTemplate,
       Assistant.Server,
       Chat,
       Chat.Message,
