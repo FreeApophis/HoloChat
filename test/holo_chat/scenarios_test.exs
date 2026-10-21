@@ -150,6 +150,38 @@ defmodule HoloChat.ScenariosTest do
     end
   end
 
+  describe "remove_scenario_image/3" do
+    test "removes the image and deletes it, keeping the other one" do
+      owner = user_scope_fixture()
+      s = scenario_fixture(owner)
+      {:ok, s} = Scenarios.update_scenario_image(owner, s, :card, gif_binary())
+      {:ok, s} = Scenarios.update_scenario_image(owner, s, :background, gif_binary())
+      Scenarios.subscribe()
+
+      assert {:ok, updated} = Scenarios.remove_scenario_image(owner, s, :card)
+
+      assert updated.card_image_id == nil
+      assert updated.background_image_id == s.background_image_id
+      assert Avatars.get_avatar(s.card_image_id) == nil
+      id = s.id
+      assert_receive {:scenario_updated, %Scenario{id: ^id, card_image_id: nil}}
+
+      assert {:ok, %{background_image_id: nil}} =
+               Scenarios.remove_scenario_image(owner, updated, :background)
+    end
+
+    test "refuses others" do
+      owner = user_scope_fixture()
+      s = scenario_fixture(owner)
+      {:ok, s} = Scenarios.update_scenario_image(owner, s, :card, gif_binary())
+
+      assert {:error, :unauthorized} =
+               Scenarios.remove_scenario_image(user_scope_fixture(), s, :card)
+
+      assert Avatars.get_avatar(s.card_image_id)
+    end
+  end
+
   describe "the suggested cast" do
     setup do
       owner = user_scope_fixture()

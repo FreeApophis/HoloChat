@@ -50,12 +50,14 @@ defmodule HoloChatWeb.ScenarioLive.Form do
               label="Card image"
               hint="Shown on cards and when a room switches to this scenario, cropped to 16:9."
               current={@scenario.card_image_id}
+              kind="card"
             />
             <.image_upload
               upload={@uploads.background_image}
               label="Background"
               hint="Shown behind the chat, cropped to 16:9."
               current={@scenario.background_image_id}
+              kind="background"
             />
           </div>
           <p :if={@image_error} id="image-error" class="mb-3 text-sm text-error">{@image_error}</p>
@@ -90,17 +92,29 @@ defmodule HoloChatWeb.ScenarioLive.Form do
   attr :label, :string, required: true
   attr :hint, :string, required: true
   attr :current, :string, default: nil
+  attr :kind, :string, required: true, doc: "\"card\" or \"background\", for removing it"
 
   defp image_upload(assigns) do
     ~H"""
     <div class="space-y-2 text-sm">
       <label class="font-medium" for={@upload.ref}>{@label}</label>
-      <div class="aspect-video overflow-hidden rounded-lg bg-gradient-to-br from-sky-500 via-indigo-500 to-fuchsia-500">
+      <div class="group relative aspect-video overflow-hidden rounded-lg bg-gradient-to-br from-sky-500 via-indigo-500 to-fuchsia-500">
         <%= case @upload.entries do %>
           <% [entry | _] -> %>
             <.live_img_preview entry={entry} class="size-full object-cover" />
           <% [] -> %>
             <img :if={@current} src={~p"/avatars/#{@current}"} alt="" class="size-full object-cover" />
+            <button
+              :if={@current}
+              id={"remove-#{@kind}-image"}
+              type="button"
+              phx-click="remove_image"
+              phx-value-kind={@kind}
+              data-confirm="Remove this image?"
+              class="absolute top-2 right-2 flex items-center gap-1 rounded-lg bg-base-100/85 px-2 py-1 text-xs font-medium text-error shadow-sm backdrop-blur transition hover:bg-base-100 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+            >
+              <.icon name="hero-trash" class="size-3.5" /> Remove
+            </button>
         <% end %>
       </div>
       <.live_file_input upload={@upload} class="file-input file-input-sm w-full" />
@@ -178,6 +192,20 @@ defmodule HoloChatWeb.ScenarioLive.Form do
 
       {:error, :unauthorized} ->
         {:noreply, put_flash(socket, :error, "You can't edit this scenario.")}
+    end
+  end
+
+  def handle_event("remove_image", %{"kind" => kind}, socket)
+      when kind in ["card", "background"] do
+    kind = String.to_existing_atom(kind)
+
+    case Scenarios.remove_scenario_image(
+           socket.assigns.current_scope,
+           socket.assigns.scenario,
+           kind
+         ) do
+      {:ok, scenario} -> {:noreply, assign(socket, :scenario, scenario)}
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "You can't edit this scenario.")}
     end
   end
 

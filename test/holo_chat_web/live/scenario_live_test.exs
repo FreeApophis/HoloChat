@@ -89,6 +89,28 @@ defmodule HoloChatWeb.ScenarioLiveTest do
       assert updated.background_image_id
     end
 
+    test "removes an image from their scenario", %{conn: conn, user: user} do
+      owner = user_scope_fixture(user)
+      scenario = scenario_fixture(owner)
+      {:ok, scenario} = Scenarios.update_scenario_image(owner, scenario, :card, gif_binary())
+
+      {:ok, scenario} =
+        Scenarios.update_scenario_image(owner, scenario, :background, gif_binary())
+
+      {:ok, view, _html} = live(conn, ~p"/scenarios/#{scenario.id}/edit")
+      assert has_element?(view, "img[src='/avatars/#{scenario.card_image_id}']")
+
+      view |> element("#remove-card-image") |> render_click()
+
+      refute has_element?(view, "img[src='/avatars/#{scenario.card_image_id}']")
+      refute has_element?(view, "#remove-card-image")
+      assert has_element?(view, "#remove-background-image")
+
+      updated = Scenarios.get_scenario(scenario.id)
+      assert updated.card_image_id == nil
+      assert updated.background_image_id == scenario.background_image_id
+    end
+
     test "cannot edit someone else's scenario", %{conn: conn} do
       scenario = scenario_fixture(user_scope_fixture())
 

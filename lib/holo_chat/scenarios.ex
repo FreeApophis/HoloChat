@@ -122,6 +122,25 @@ defmodule HoloChat.Scenarios do
     end)
   end
 
+  @doc """
+  Removes the scenario's `:card` or `:background` image and deletes it.
+  """
+  def remove_scenario_image(scope, %Scenario{} = scenario, kind)
+      when is_map_key(@image_sizes, kind) do
+    authorize(scope, scenario, fn ->
+      scenario |> remove_image(image_field(kind)) |> broadcast_update()
+    end)
+  end
+
+  defp remove_image(scenario, field) do
+    Repo.transact(fn ->
+      with {:ok, updated} <- scenario |> Ecto.Changeset.change([{field, nil}]) |> Repo.update() do
+        :ok = Avatars.delete_avatar(Map.fetch!(scenario, field))
+        {:ok, updated}
+      end
+    end)
+  end
+
   defp image_field(:card), do: :card_image_id
   defp image_field(:background), do: :background_image_id
 
